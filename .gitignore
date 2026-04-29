@@ -1,0 +1,141 @@
+# ============================================================================
+# .gitignore para projeto ERS Simulator (VHDL + Simulink + ModelSim)
+# ============================================================================
+
+# ---------- MATLAB / Simulink ----------
+# Cache de build do Simulink
+slprj/
+sccprj/
+
+# Cache compilado de modelos Simulink
+*.slxc
+
+# Autosave e backups do Simulink
+*.slx.r20*
+*.slx.autosave
+*.slx.original
+*.mdl.autosave
+*.mdl.original
+*.autosave
+
+# MEX files compilados (especificos por plataforma)
+*.mex
+*.mexw32
+*.mexw64
+*.mexmaci64
+*.mexa64
+
+# Arquivos auxiliares MATLAB
+*.asv
+*.m~
+octave-workspace
+
+# Saidas do Code Generation (Simulink Coder / Embedded Coder)
+*_grt_rtw/
+*_ert_rtw/
+*_sfun_rtw/
+*_sfun.c
+*_sfun.h
+*_sfun.mexw64
+
+# ---------- ModelSim / Questa ----------
+# Biblioteca compilada
+work/
+modelsim.ini
+*.mti
+
+# Logs e arquivos de simulacao
+transcript
+vsim.wlf
+wlf*
+vsim.dbg
+vish_stacktrace.vstf
+*.vstf
+.modelsim/
+
+# Coverage
+covhtmlreport/
+*.ucdb
+*.ucdb.lock
+
+# ---------- Quartus / Vivado (se for sintetizar no futuro) ----------
+# Quartus Prime
+db/
+incremental_db/
+output_files/
+*.qpf
+*.qsf
+*.qws
+*.rpt
+*.smsg
+*.summary
+*.sof
+*.pof
+*.jdi
+*.sld
+*.qdf
+*.qip
+*.qsys
+*.qmsg
+
+# Vivado
+.Xil/
+*.jou
+*.log
+*.str
+*.cache/
+*.runs/
+*.hw/
+*.ip_user_files/
+*.sim/
+*.gen/
+
+# ---------- Sistema operacional ----------
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# ---------- Editores / IDEs ----------
+# VS Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# JetBrains
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ---------- Saidas / temporarios do projeto ----------
+# Figuras e logs gerados pela analise (se quiser versionar, comente)
+results/
+figures/
+*.fig
+*.png.bak
+
+# Arquivos temporarios
+*.tmp
+*.bak
+*.old
+*.log
