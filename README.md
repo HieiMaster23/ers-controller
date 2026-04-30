@@ -1,10 +1,10 @@
 # ERS Simulation Project
 
-Simulador de Sistema de Recuperacao de Energia (ERS) inspirado em regulamentos de Formula 1, implementado em VHDL com co-simulacao Simulink/ModelSim.
+Simulador de Sistema de Recuperação de Energia (ERS) inspirado em regulamentos de Formula 1, implementado em VHDL com co-simulação Simulink/ModelSim.
 
 ## Objetivo
 
-Projeto academico que demonstra o funcionamento de um controlador eletronico embarcado de alta exigencia temporal, aplicado ao gerenciamento de energia em um carro de corrida. O sistema decide quando recuperar energia (frenagem e turbo) e quando injeta-la na tracao, respeitando limites rigidos do regulamento.
+Projeto acadêmico que demonstra o funcionamento de um controlador eletrônico embarcado de alta exigencia temporal, aplicado ao gerenciamento de energia em um carro de corrida. O sistema decide quando recuperar energia (frenagem e turbo) e quando injeta-la na tração, respeitando limites rígidos do regulamento.
 
 ## Arquitetura do Sistema
 
@@ -20,25 +20,25 @@ Projeto academico que demonstra o funcionamento de um controlador eletronico emb
                                        +----------------------------+
 ```
 
-## Restricoes do Regulamento Simulado
+## Restrições do Regulamento Simulado
 
 | Parametro                       | Limite     |
 |---------------------------------|------------|
-| Energia maxima por volta        | 4 MJ       |
-| Potencia maxima deploy (MGU-K)  | 120 kW     |
-| Potencia maxima harvest (MGU-K) | 120 kW     |
-| SoC minimo da bateria           | 20%        |
+| Energia máxima por volta        | 4 MJ       |
+| Potência máxima deploy (MGU-K)  | 120 kW     |
+| Potência máxima harvest (MGU-K) | 120 kW     |
+| SoC mínimo da bateria           | 20%        |
 | SoC maximo da bateria           | 95%        |
-| Tensao nominal barramento HV    | 400 V      |
+| Tensão nominal barramento HV    | 400 V      |
 
 ## Ferramentas
 
 | Ferramenta           | Funcao                                          |
 |----------------------|-------------------------------------------------|
-| ModelSim / Questa    | Simulacao e verificacao do VHDL                  |
-| MATLAB / Simulink    | Modelo fisico do veiculo e co-simulacao          |
-| Simscape Electrical  | Modelagem dos componentes eletricos              |
-| HDL Verifier         | Bloco de co-simulacao entre Simulink e ModelSim  |
+| ModelSim / Questa    | Simulação e verificação do VHDL                  |
+| MATLAB / Simulink    | Modelo físico do veículo e co-simulacao          |
+| Simscape Electrical  | Modelagem dos componentes elétricos              |
+| HDL Verifier         | Bloco de co-simulação entre Simulink e ModelSim  |
 
 ## Estrutura do Projeto
 
@@ -71,40 +71,40 @@ ers_project/
     +-- sim_cosim.do
 ```
 
-## Documentacao
+## Documentação
 
-- [Introducao e Motivacao](docs/01_introducao.md)
-- [Modelo Fisico (Simulink)](docs/02_modelo_fisico.md)
+- [Introdução e Motivação](docs/01_introducao.md)
+- [Modelo Físico (Simulink)](docs/02_modelo_fisico.md)
 - [Arquitetura VHDL](docs/03_arquitetura_vhdl.md)
-- [Co-simulacao](docs/04_cosimulacao.md)
-- [Resultados e Analise](docs/05_resultados.md)
+- [Co-simulação](docs/04_cosimulacao.md)
+- [Resultados e Análise](docs/05_resultados.md)
 
-## Convencoes de Codigo VHDL
+## Convenções de Código VHDL
 
 - `snake_case` para sinais e portas; `UPPER_CASE` para constantes e generics
-- Clock: `rising_edge(clk)`; reset assincrono: `if rst_n = '0'`
+- Clock: `rising_edge(clk)`; reset assíncrono: `if rst_n = '0'`
 - Biblioteca: `numeric_std` (nunca `std_logic_arith`)
 - Ponto fixo: formato Q documentado em cada sinal
-- Cabecalho obrigatorio em cada arquivo
+- Cabeçalho obrigatorio em cada arquivo
 
 ## Status
 
-- [x] Etapa 1 -- Estrutura do projeto e documentacao inicial
-- [x] Etapa 2 -- Modelo fisico no Simulink
+- [x] Etapa 1 -- Estrutura do projeto e documentação inicial
+- [x] Etapa 2 -- Modelo físico no Simulink
 - [x] Etapa 3 -- Implementacao VHDL (FSM, PI, Arbiter, Energy Meter, Top)
-- [x] Etapa 4 -- Co-simulacao (Simulink + placeholder / HDL Verifier)
-- [x] Etapa 5 -- Analise de resultados e documentacao final
+- [x] Etapa 4 -- Co-simulação (Simulink + placeholder / HDL Verifier)
+- [x] Etapa 5 -- Análise de resultados e documentação final
 
-**Projeto concluido.** Veja [docs/05_resultados.md](docs/05_resultados.md) para a analise final.
+**Projeto concluido.** Veja [docs/05_resultados.md](docs/05_resultados.md) para a análise final.
 
 ## Resultados Principais
 
-| Metrica | Limite | Observado | Status |
+| Métrica | Limite | Observado | Status |
 |---------|--------|-----------|--------|
 | Energia deploy / volta | <= 4 MJ | 3.82 MJ | Aprovado |
-| Potencia MGU-K pico | <= 120 kW | 83.8 kW | Aprovado |
-| Potencia MGU-H pico | <= 50 kW | 50.0 kW | Aprovado |
-| Potencia deploy pico | <= 120 kW | 120.0 kW | Aprovado |
+| Potência MGU-K pico | <= 120 kW | 83.8 kW | Aprovado |
+| Potência MGU-H pico | <= 50 kW | 50.0 kW | Aprovado |
+| Potência deploy pico | <= 120 kW | 120.0 kW | Aprovado |
 | SoC min / max | [20%, 95%] | [25%, 70%] | Aprovado |
 
 **Testbenches VHDL:** 4/4 passando (ers_fsm, pi_controller, power_arbiter, ers_top) -- 33 testes individuais cobrindo transicoes, prioridades, saturacao, anti-windup, corte de energia e PWM.
