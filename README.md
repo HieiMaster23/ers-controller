@@ -51,6 +51,7 @@ Valores da **árvore Simulink/controlador** (`docs/`, `simulink/`, `vhdl/`). Sã
 O diretório [`fpga-ep4ce6/`](fpga-ep4ce6/) é o **alvo de placa** para iterar no Cursor: protótipo VHDL-93 para **Altera Cyclone IV E EP4CE6E22C8**, Quartus II **13.0sp1**, dashboard VGA gerado por pixel (sem framebuffer) e ROM de **volta sintética de exemplo** (90 s, 900 amostras — **não é um circuito real**).
 
 - Abra o projeto em **`fpga-ep4ce6/quartus/ers.qpf`** no Quartus II 13.0sp1 (revisão `ers_ep4ce6`, top `ers_top`).
+- Contrato dos estímulos: [`fpga-ep4ce6/stim/SCALE.md`](fpga-ep4ce6/stim/SCALE.md) (`stim/` é canônico; `matlab/` é o gerador). A ROM VHDL ainda usa `lap_rom_init.vhd`, sem `INIT_FILE` no Quartus.
 - Pinos de I/O estão como **placeholders** (`PIN_XX`) — ver [`fpga-ep4ce6/quartus/PINOS.md`](fpga-ep4ce6/quartus/PINOS.md). Preencha pelo esquemático da placa; **não invente números de pino**.
 - Constantes de energia/potência são **unidades escaladas de protótipo**, inspiradas em F1 — **não são números oficiais da FIA**.
 - v1: apenas MGU-K + energy store (sem MGU-H). README detalhado em [`fpga-ep4ce6/README.md`](fpga-ep4ce6/README.md).
@@ -89,6 +90,7 @@ ers_project/
 +-- fpga-ep4ce6/           (protótipo FPGA VGA — alvo de placa)
     +-- README.md
     +-- rtl/               VHDL-93 (ers_pkg, lap_rom, mgu_k, dash_vga, ers_top, …)
+    +-- stim/              contrato SCALE.md + volta_sintetica.mif/.hex/.txt (exemplo)
     +-- matlab/            gerador + volta_sintetica.mif / .csv (exemplo)
     +-- sim/               tb_ers.vhd, tb_ers_plant.vhd
     +-- quartus/           ers.qpf, ers_ep4ce6.qsf, ers.sdc, PINOS.md

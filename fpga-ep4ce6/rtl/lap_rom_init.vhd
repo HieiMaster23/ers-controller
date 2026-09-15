@@ -1,4 +1,4 @@
--- Auto-generated from matlab/volta_sintetica (same numbers as MIF).
+-- Auto-generated from stim/volta_sintetica (same numbers as MIF; ver stim/SCALE.md).
 -- Pack: [27:24]=sector [23:16]=brake [15:8]=throttle [7:0]=speed
 library ieee;
 use ieee.std_logic_1164.all;

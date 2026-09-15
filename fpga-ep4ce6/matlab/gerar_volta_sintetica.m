@@ -2,7 +2,7 @@
 % Gera volta sintetica EXEMPLO (nao e um circuito real) para o prototipo ERS EP4CE6.
 % Compativel com MATLAB e Octave (sem toolboxes extras).
 %
-% Empacotamento da palavra 32 bits (hex no MIF):
+% Empacotamento da palavra 32 bits (hex no MIF) — ver ../stim/SCALE.md:
 %   bits [7:0]   = speed     (0..255, tipico 80..250)
 %   bits [15:8]  = throttle  (0..255)
 %   bits [23:16] = brake     (0..255)
@@ -10,8 +10,21 @@
 %   bits [31:28] = 0
 %
 % N=900, Ts=0.1 s => 90 s de volta.
+%
+% Destinos:
+%   matlab/volta_sintetica.mif  +  .csv     (workspace do gerador)
+%   stim/volta_sintetica.mif    +  .hex .txt (pasta canonica do contrato)
 
 clear; close all;
+
+src_dir = fileparts(mfilename('fullpath'));
+if isempty(src_dir)
+  src_dir = pwd;
+end
+stim_dir = fullfile(src_dir, '..', 'stim');
+if exist(stim_dir, 'dir') ~= 7
+  mkdir(stim_dir);
+end
 
 N  = 900;
 Ts = 0.1;
@@ -96,24 +109,28 @@ sector   = max(1, min(15, round(sector)));
 
 words = bitshift(sector, 24) + bitshift(brake, 16) + bitshift(throttle, 8) + speed;
 
-% --- MIF ---
-fid = fopen('volta_sintetica.mif', 'w');
-fprintf(fid, '-- Volta sintetica EXEMPLO para ERS EP4CE6\n');
-fprintf(fid, '-- Pack: [31:28]=0 [27:24]=sector [23:16]=brake [15:8]=throttle [7:0]=speed\n');
-fprintf(fid, 'DEPTH = 900;\n');
-fprintf(fid, 'WIDTH = 32;\n');
-fprintf(fid, 'ADDRESS_RADIX = DEC;\n');
-fprintf(fid, 'DATA_RADIX = HEX;\n');
-fprintf(fid, 'CONTENT\n');
-fprintf(fid, 'BEGIN\n');
-for i = 1:N
-  fprintf(fid, '%4d : %08X;\n', i-1, words(i));
+% --- MIF (matlab/ e stim/) ---
+mif_paths = {fullfile(src_dir, 'volta_sintetica.mif'), ...
+             fullfile(stim_dir, 'volta_sintetica.mif')};
+for p = 1:numel(mif_paths)
+  fid = fopen(mif_paths{p}, 'w');
+  fprintf(fid, '-- Volta sintetica EXEMPLO para ERS EP4CE6\n');
+  fprintf(fid, '-- Pack: [31:28]=0 [27:24]=sector [23:16]=brake [15:8]=throttle [7:0]=speed\n');
+  fprintf(fid, 'DEPTH = 900;\n');
+  fprintf(fid, 'WIDTH = 32;\n');
+  fprintf(fid, 'ADDRESS_RADIX = DEC;\n');
+  fprintf(fid, 'DATA_RADIX = HEX;\n');
+  fprintf(fid, 'CONTENT\n');
+  fprintf(fid, 'BEGIN\n');
+  for i = 1:N
+    fprintf(fid, '%4d : %08X;\n', i-1, words(i));
+  end
+  fprintf(fid, 'END;\n');
+  fclose(fid);
 end
-fprintf(fid, 'END;\n');
-fclose(fid);
 
-% --- CSV ---
-fid = fopen('volta_sintetica.csv', 'w');
+% --- CSV (so matlab/, inspecao humana) ---
+fid = fopen(fullfile(src_dir, 'volta_sintetica.csv'), 'w');
 fprintf(fid, 'idx,t_s,speed,throttle,brake,sector,word_hex\n');
 for i = 1:N
   fprintf(fid, '%d,%.1f,%d,%d,%d,%d,%08X\n', ...
@@ -121,4 +138,29 @@ for i = 1:N
 end
 fclose(fid);
 
-fprintf('Gerado: volta_sintetica.mif e volta_sintetica.csv (%d amostras)\n', N);
+% --- HEX Intel HEX-32 (stim/) : 1 palavra / record, addr em bytes, MSB primeiro ---
+fid = fopen(fullfile(stim_dir, 'volta_sintetica.hex'), 'w');
+for i = 1:N
+  word = words(i);
+  addr = (i-1)*4;
+  b1 = bitand(bitshift(word, -24), 255);
+  b2 = bitand(bitshift(word, -16), 255);
+  b3 = bitand(bitshift(word, -8), 255);
+  b4 = bitand(word, 255);
+  rec_sum = 4 + bitand(bitshift(addr, -8), 255) + bitand(addr, 255) + 0 ...
+            + b1 + b2 + b3 + b4;
+  csum = bitand(256 - bitand(rec_sum, 255), 255);
+  fprintf(fid, ':%02X%04X00%02X%02X%02X%02X%02X\n', 4, addr, b1, b2, b3, b4, csum);
+end
+fprintf(fid, ':00000001FF\n');
+fclose(fid);
+
+% --- TXT $readmemh (stim/) : uma palavra hex por linha, sem @endereco ---
+fid = fopen(fullfile(stim_dir, 'volta_sintetica.txt'), 'w');
+for i = 1:N
+  fprintf(fid, '%08X\n', words(i));
+end
+fclose(fid);
+
+fprintf(['Gerado: matlab/volta_sintetica.mif + .csv e ' ...
+         'stim/volta_sintetica.mif + .hex + .txt (%d amostras)\n'], N);

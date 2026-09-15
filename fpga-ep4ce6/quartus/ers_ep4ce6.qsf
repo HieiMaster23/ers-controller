@@ -12,6 +12,10 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "12:50:00  SEPTEMBER 15, 
 set_global_assignment -name LAST_QUARTUS_VERSION 13.0
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 
+# ROM desta v1 = array VHDL (lap_rom_init.vhd), sem INIT_FILE.
+# Quando migrar para altsyncram, usar ../stim/volta_sintetica.mif (canonico; SCALE.md).
+# Nao apontar matlab/volta_sintetica.mif.
+
 # --- VHDL sources (relative to this .qsf in quartus/) ---
 set_global_assignment -name VHDL_FILE ../rtl/ers_pkg.vhd
 set_global_assignment -name VHDL_FILE ../rtl/lap_rom_init.vhd

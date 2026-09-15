@@ -1,5 +1,6 @@
 -------------------------------------------------------------------------------
 -- lap_rom.vhd — ROM 900 x 32b (array constante = MIF; sem IP MegaWizard)
+-- MIF canonico: stim/volta_sintetica.mif (ver stim/SCALE.md)
 -------------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;

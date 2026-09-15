@@ -17,7 +17,8 @@ Placa tem VGA; **sem framebuffer** (gerar cor no scan a partir de x,y) por causa
 fpga-ep4ce6/
   README.md
   rtl/           VHDL-93
-  matlab/        gerador + MIF/CSV
+  stim/          contrato SCALE.md + volta_sintetica.mif/.hex/.txt (canônico)
+  matlab/        gerador + MIF/CSV (workspace)
   sim/           testbenches
   quartus/       .qpf .qsf PINOS.md
 ```
@@ -39,8 +40,11 @@ A árvore antiga de controlador Simulink/ModelSim (`vhdl/`, `simulink/`, `docs/`
 900 amostras × 0,1 s = **90 s** de volta sintética **EXEMPLO** (não é circuito real).
 
 A ROM em `lap_rom.vhd` usa o array constante de `lap_rom_init.vhd` (mesmos números do MIF),
-para sim e síntese baterem **sem MegaWizard**. O MIF em `matlab/volta_sintetica.mif` fica
-disponível se quiser `altsyncram` + `INIT_FILE` depois.
+para sim e síntese baterem **sem MegaWizard**. O contrato numérico e os arquivos de estímulo
+canônicos estão em `stim/` — leia `stim/SCALE.md`. O `.mif` em `stim/volta_sintetica.mif`
+(cópia idêntica de `matlab/volta_sintetica.mif`) é o path a usar se quiser `altsyncram` +
+`INIT_FILE` depois. O `.qsf` desta v1 **não** aponta `INIT_FILE` (só VHDL); não há path
+Quartus para inverter até a ROM virar IP.
 
 ---
 
@@ -102,15 +106,16 @@ octave --no-gui gerar_volta_sintetica.m
 # ou no MATLAB: run('gerar_volta_sintetica.m')
 ```
 
-Gera `volta_sintetica.mif` e `volta_sintetica.csv` no diretório atual.
+Gera `matlab/volta_sintetica.mif` + `.csv` **e** `stim/volta_sintetica.mif` + `.hex` + `.txt`
+(caminhos relativos ao script; não precisa copiar à mão). Contrato: `stim/SCALE.md`.
 
 ### Python (equivalente — usado neste repositório na box)
 
 Se não houver MATLAB/Octave, rode um gerador Python que emite os **mesmos** números e
-também regenera `rtl/lap_rom_init.vhd`. Os arquivos já commitados/gerados sob `matlab/` e
-`rtl/lap_rom_init.vhd` estão prontos.
+também regenera `rtl/lap_rom_init.vhd`. Os arquivos já commitados/gerados sob `matlab/`,
+`stim/` e `rtl/lap_rom_init.vhd` estão prontos.
 
-Após regenerar o MIF, regenere `lap_rom_init.vhd` para sim/síntese continuarem alinhados.
+Após regenerar o MIF, regenere `rtl/lap_rom_init.vhd` para sim/síntese continuarem alinhados.
 
 ---
 
