@@ -1,6 +1,9 @@
 # ERS Simulation Project
 
-Simulador de Sistema de Recuperação de Energia (ERS) inspirado em regulamentos de Formula 1, implementado em VHDL com co-simulação Simulink/ModelSim.
+Simulador de Sistema de Recuperação de Energia (ERS) inspirado em regulamentos de Formula 1. Há **duas árvores independentes** neste repositório:
+
+1. **Controlador VHDL + co-simulação Simulink/ModelSim** (`simulink/`, `vhdl/`, `testbench/`, `docs/`, `scripts/`) — trabalho anterior.
+2. **Protótipo FPGA Cyclone IV EP4CE6** (`fpga-ep4ce6/`) — VHDL-93 com dashboard VGA, ROM de volta sintética e projeto Quartus II 13.0sp1.
 
 ## Objetivo
 
@@ -22,6 +25,8 @@ Projeto acadêmico que demonstra o funcionamento de um controlador eletrônico e
 
 ## Restrições do Regulamento Simulado
 
+Valores da **árvore Simulink/controlador** (`docs/`, `simulink/`, `vhdl/`). São limites do modelo acadêmico — **não são números oficiais da FIA**. O protótipo FPGA em `fpga-ep4ce6/` usa unidades inteiras próprias (`ers_pkg.vhd`); não misture as duas escalas.
+
 | Parametro                       | Limite     |
 |---------------------------------|------------|
 | Energia máxima por volta        | 4 MJ       |
@@ -39,6 +44,19 @@ Projeto acadêmico que demonstra o funcionamento de um controlador eletrônico e
 | MATLAB / Simulink    | Modelo físico do veículo e co-simulacao          |
 | Simscape Electrical  | Modelagem dos componentes elétricos              |
 | HDL Verifier         | Bloco de co-simulação entre Simulink e ModelSim  |
+| Quartus II 13.0sp1   | Síntese do protótipo FPGA EP4CE6 (`fpga-ep4ce6/`) |
+
+## Alvo FPGA — EP4CE6 (dashboard VGA)
+
+O diretório [`fpga-ep4ce6/`](fpga-ep4ce6/) é o **alvo de placa** para iterar no Cursor: protótipo VHDL-93 para **Altera Cyclone IV E EP4CE6E22C8**, Quartus II **13.0sp1**, dashboard VGA gerado por pixel (sem framebuffer) e ROM de **volta sintética de exemplo** (90 s, 900 amostras — **não é um circuito real**).
+
+- Abra o projeto em **`fpga-ep4ce6/quartus/ers.qpf`** no Quartus II 13.0sp1 (revisão `ers_ep4ce6`, top `ers_top`).
+- Contrato dos estímulos: [`fpga-ep4ce6/stim/SCALE.md`](fpga-ep4ce6/stim/SCALE.md) (`stim/` é canônico; `matlab/` é o gerador). A ROM VHDL ainda usa `lap_rom_init.vhd`, sem `INIT_FILE` no Quartus.
+- Pinos de I/O estão como **placeholders** (`PIN_XX`) — ver [`fpga-ep4ce6/quartus/PINOS.md`](fpga-ep4ce6/quartus/PINOS.md). Preencha pelo esquemático da placa; **não invente números de pino**.
+- Constantes de energia/potência são **unidades escaladas de protótipo**, inspiradas em F1 — **não são números oficiais da FIA**.
+- v1: apenas MGU-K + energy store (sem MGU-H). README detalhado em [`fpga-ep4ce6/README.md`](fpga-ep4ce6/README.md).
+
+Esta árvore **não substitui** o controlador Simulink em `vhdl/` / `simulink/`; as duas convivem no mesmo repositório.
 
 ## Estrutura do Projeto
 
@@ -54,7 +72,7 @@ ers_project/
 +-- simulink/
 |   +-- vehicle_model.slx
 |   +-- cosim_top.slx
-+-- vhdl/
++-- vhdl/                  (controlador co-simulação — árvore antiga)
 |   +-- ers_fsm.vhd
 |   +-- pi_controller.vhd
 |   +-- power_arbiter.vhd
@@ -66,9 +84,16 @@ ers_project/
 |   +-- tb_power_arbiter.vhd
 |   +-- tb_ers_top.vhd
 +-- scripts/
-    +-- compile_all.do
-    +-- sim_standalone.do
-    +-- sim_cosim.do
+|   +-- compile_all.do
+|   +-- sim_standalone.do
+|   +-- sim_cosim.do
++-- fpga-ep4ce6/           (protótipo FPGA VGA — alvo de placa)
+    +-- README.md
+    +-- rtl/               VHDL-93 (ers_pkg, lap_rom, mgu_k, dash_vga, ers_top, …)
+    +-- stim/              contrato SCALE.md + volta_sintetica.mif/.hex/.txt (exemplo)
+    +-- matlab/            gerador + volta_sintetica.mif / .csv (exemplo)
+    +-- sim/               tb_ers.vhd, tb_ers_plant.vhd
+    +-- quartus/           ers.qpf, ers_ep4ce6.qsf, ers.sdc, PINOS.md
 ```
 
 ## Documentação
@@ -78,6 +103,7 @@ ers_project/
 - [Arquitetura VHDL](docs/03_arquitetura_vhdl.md)
 - [Co-simulação](docs/04_cosimulacao.md)
 - [Resultados e Análise](docs/05_resultados.md)
+- [Protótipo FPGA EP4CE6 (VGA)](fpga-ep4ce6/README.md)
 
 ## Convenções de Código VHDL
 
@@ -95,7 +121,9 @@ ers_project/
 - [x] Etapa 4 -- Co-simulação (Simulink + placeholder / HDL Verifier)
 - [x] Etapa 5 -- Análise de resultados e documentação final
 
-**Projeto concluido.** Veja [docs/05_resultados.md](docs/05_resultados.md) para a análise final.
+**Co-simulação Simulink:** etapas 1–5 concluídas. Veja [docs/05_resultados.md](docs/05_resultados.md).
+
+**FPGA EP4CE6:** protótipo VHDL-93 + Quartus 13.0sp1 em [`fpga-ep4ce6/`](fpga-ep4ce6/) (v1, sem MGU-H; pinos ainda placeholders).
 
 ## Resultados Principais
 
@@ -123,8 +151,16 @@ analyze_cosim_results
 ```
 
 ```tcl
-# Testbenches VHDL (ModelSim)
+# Testbenches VHDL do controlador (ModelSim)
 cd ers_project/scripts
 do compile_all.do
 do sim_standalone.do
+```
+
+```text
+# Protótipo FPGA (Quartus II 13.0sp1)
+# 1. Abra fpga-ep4ce6/quartus/ers.qpf
+# 2. Preencha pinos em ers_ep4ce6.qsf (hoje PIN_XX — ver quartus/PINOS.md)
+# 3. Processing → Start Compilation
+# Simulação ModelSim: ver fpga-ep4ce6/README.md
 ```

@@ -58,25 +58,34 @@ covhtmlreport/
 *.ucdb
 *.ucdb.lock
 
-# ---------- Quartus / Vivado (se for sintetizar no futuro) ----------
-# Quartus Prime
+# ---------- Quartus II / Prime ----------
+# Artefatos de compilação. NÃO ignore .qpf / .qsf / .sdc — são o projeto versionado.
 db/
 incremental_db/
 output_files/
-*.qpf
-*.qsf
+greybox_tmp/
+simulation/
+hc_output/
 *.qws
 *.rpt
 *.smsg
 *.summary
+*.done
 *.sof
 *.pof
 *.jdi
 *.sld
+*.pin
 *.qdf
 *.qip
 *.qsys
 *.qmsg
+*.map
+*.fit.rpt
+*.sta.rpt
+*.eda.rpt
+*.flow.rpt
+c5_pin_model_dump.txt
 
 # Vivado
 .Xil/
