@@ -1,0 +1,19 @@
+﻿# Quartus
+db/
+incremental_db/
+output_files/
+greybox_tmp/
+*.qws
+*.sof
+*.pof
+*.jic
+*.jbc
+*.rbf
+# ModelSim
+work/
+transcript
+*.wlf
+*.vstf
+# OS
+Thumbs.db
+.DS_Store
