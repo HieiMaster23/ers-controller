@@ -29,6 +29,10 @@ architecture sim of tb_ers_top is
     signal soc_in      : std_logic_vector(11 downto 0) := (others => '0');
     signal turbo_rpm   : std_logic_vector(15 downto 0) := (others => '0');
     signal lap_reset   : std_logic := '0';
+    -- Sem planta neste testbench: potencia medida fica em 0, entao o PI
+    -- leva o duty ao maximo durante o deploy (pior caso para o limite de
+    -- energia). A malha fechada e testada na co-simulacao (cosim/).
+    signal p_mguk_meas : std_logic_vector(15 downto 0) := (others => '0');
     signal pwm_mguk    : std_logic;
     signal pwm_mguh    : std_logic;
     signal ers_mode    : std_logic_vector(2 downto 0);
@@ -92,6 +96,7 @@ begin
             soc_in      => soc_in,
             turbo_rpm   => turbo_rpm,
             lap_reset   => lap_reset,
+            p_mguk_meas => p_mguk_meas,
             pwm_mguk    => pwm_mguk,
             pwm_mguh    => pwm_mguh,
             ers_mode    => ers_mode,

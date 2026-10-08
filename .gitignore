@@ -140,3 +140,4 @@ figures/
 *.old
 *.log
 build/
+__pycache__/

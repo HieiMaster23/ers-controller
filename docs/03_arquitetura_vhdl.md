@@ -17,7 +17,7 @@
   |  throttle ----> setpoint|     +-----------+    [       ] |
   |                         v     |           |    [       ] |
   |                 [pi_controller]--duty_out->+-->[       ] |
-  |  speed_rpm ---> [            ]     duty_limited   |      |
+  |  p_mguk_meas -> [            ]     duty_limited   |      |
   |                 +------------+         |          |      |
   |                                        v          |      |
   |                                [energy_meter]<----+      |
@@ -201,7 +201,15 @@ setpoint = throttle & "0000"   (shift left 4 = throttle * 16)
          = throttle(12 bits) -> setpoint(16 bits)
 ```
 
-O sinal `measured` recebe `speed_rpm` como proxy de potencia entregue. O PI ajusta o duty cycle para que a potencia de tracao acompanhe a demanda do piloto (throttle).
+O sinal `measured` recebe a porta `p_mguk_meas`, a potencia de deploy medida na planta (0-65535 = 0-120 kW, mesma escala do setpoint). O PI ajusta o duty cycle para que a potencia de tracao acompanhe a demanda do piloto (throttle). Versoes anteriores usavam `speed_rpm` como "proxy", o que deixava a malha efetivamente aberta (ver [capitulo 6](06_cosimulacao_python.md)).
+
+### Generics do top-level:
+
+| Generic | Padrao | Uso |
+|---------|--------|-----|
+| `CLK_HZ` | 50_000_000 | Escala da integracao de energia |
+| `KP`, `KI` | 1024, 64 | Ganhos do PI em Q16, aplicados a cada ciclo |
+| `PWM_PERIOD` | 999 | Contador PWM de 0 a `PWM_PERIOD` (50 kHz a 50 MHz) |
 
 ### Sinal de feedback:
 

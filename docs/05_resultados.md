@@ -132,11 +132,11 @@ Correspondente a: STANDBY -> HARVESTING_K -> STANDBY -> HARVESTING_H -> DEPLOYIN
 
 ## 5.6 Limitacoes Conhecidas
 
-1. **Modo co-simulacao real nao testado nesta execucao**: requer licenca HDL Verifier + configuracao manual do bloco de mapeamento de sinais. A infraestrutura (`sim_cosim.do`, bloco `HDL Cosim`) esta pronta; falta apenas a licenca.
+1. **Modo co-simulacao real (Simulink) nao testado nesta execucao**: requer licenca HDL Verifier + configuracao manual do bloco de mapeamento de sinais. A infraestrutura (`sim_cosim.do`, bloco `HDL Cosim`) esta pronta; falta apenas a licenca. A co-simulacao livre do [capitulo 6](06_cosimulacao_python.md) roda o VHDL real em malha fechada.
 2. **Placeholder nao exercita PI**: em modo placeholder, o duty de deploy vem direto do throttle (`duty = throttle * 16`), sem malha PI. O PI esta validado via `tb_pi_controller` mas nao integrado na co-simulacao em modo placeholder.
 3. **Nao ha validacao em hardware real**: projeto e apenas simulado; sintese em FPGA nao foi realizada.
 4. **Cenario unico**: uma volta com perfil fixo; nao ha variacoes de condicoes de pista (chuva, safety car, ultrapassagens).
-5. **Realimentacao do PI sem significado fisico**: em `ers_top`, o valor medido do PI e `speed_rpm` e o setpoint e `throttle * 16`. Sao grandezas diferentes; na pratica o erro fica sempre positivo em deploy e o duty vai a 100% (malha efetivamente aberta). O medido deveria ser potencia ou corrente do MGU-K -- a ser resolvido junto com a planta de co-simulacao.
+5. ~~**Realimentacao do PI sem significado fisico**~~ (resolvido no capitulo 6): o valor medido do PI era `speed_rpm`, comparado com `throttle * 16`. Agora e a nova porta `p_mguk_meas` (potencia de deploy medida).
 6. **PWM sem direcao**: `pwm_mguk` nao indica se o MGU-K esta tracionando ou gerando. Necessario um sinal de modo/direcao para acionar uma ponte H real.
 
 ## 5.7 Propostas de Melhoria

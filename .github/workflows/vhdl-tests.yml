@@ -24,3 +24,32 @@ jobs:
         with:
           name: ghdl-logs
           path: build/ghdl/*.log
+
+  cosim:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar GHDL e dependencias Python
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghdl
+          pip install -r cosim/requirements.txt
+
+      - name: Co-simulacao VHDL + planta Python
+        run: python cosim/run_cosim.py
+
+      - name: Graficos
+        if: always()
+        run: python cosim/plot_results.py
+
+      - name: Publicar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosim-results
+          path: cosim/results/

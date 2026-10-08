@@ -79,6 +79,7 @@ Abra `cosim_top.slx` e dê duplo clique no bloco `HDL_Cosim`:
     | `soc_in` | Input | Unsigned | 12 |
     | `turbo_rpm` | Input | Unsigned | 16 |
     | `lap_reset` | Input | Logic | 1 |
+    | `p_mguk_meas` | Input | Unsigned | 16 |
     | `pwm_mguk` | Output | Logic | 1 |
     | `pwm_mguh` | Output | Logic | 1 |
     | `ers_mode` | Output | Unsigned | 3 |
@@ -145,12 +146,13 @@ analyze_cosim_results  % analisa dados
 
 | Porta Simulink (Plant saida) | Sinal VHDL (ers_top entrada) | Tipo | Escala |
 |------------------------------|------------------------------|------|--------|
-| `speed_rpm` | `speed_rpm` | uint16 | 1 RPM = 1 LSB |
+| `speed_rpm` | `speed_rpm` | uint16 | 1 RPM = 1 LSB (reservado, nao usado pelo controlador) |
 | `brake_pres` | `brake_pres` | uint12 | 0-100 bar -> 0-4095 |
 | `throttle` | `throttle` | uint12 | 0-100% -> 0-4095 |
 | `soc_adc` | `soc_in` | uint12 | 0-100% -> 0-4095 |
 | `turbo_rpm` | `turbo_rpm` | uint16 | 1 RPM = 1 LSB |
 | `lap_reset` | `lap_reset` | logic | Pulso de 1 amostra por volta |
+| `P_deploy` (potencia de deploy medida) | `p_mguk_meas` | uint16 | 0-120 kW -> 0-65535 (feedback do PI) |
 
 | Sinal VHDL (ers_top saida) | Uso no Simulink | Tipo | Descricao |
 |----------------------------|-----------------|------|-----------|
@@ -186,6 +188,8 @@ Em modo HDL real, `P_deploy_in` recebe `Constant(0)` por padrao — o usuario de
 
 ### 6. Limite de 4 MJ/volta no controlador placeholder
 O controlador em Simulink (modo sem HDL Verifier) agora inclui um integrador de energia por volta com reset externo via `lap_reset`. Quando a energia acumulada excede 4 MJ, o AND de 3 entradas corta o deploy ate o proximo reset de volta. Isso replica o comportamento do `energy_meter` + `ers_fsm` em VHDL.
+
+> **Alternativa livre:** a co-simulacao com GHDL + cocotb e planta em Python ([capitulo 6](06_cosimulacao_python.md)) roda o VHDL real em malha fechada sem MATLAB nem HDL Verifier.
 
 ## 4.8 Escala Temporal
 
