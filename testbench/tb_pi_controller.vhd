@@ -91,15 +91,20 @@ begin
         -- Setpoint = 10000, Measured = 5000 -> erro = 5000
         -- P = KP * error = 1024 * 5000 = 5120000 (Q16)
         -- P_real = 5120000 / 65536 = 78.125
-        -- A saida deve crescer progressivamente com o integrador
+        -- Na borda de enable o integrador e pre-carregado com o setpoint
+        -- (partida sem salto): a primeira saida e ~10000 + 78.
+        -- Depois cresce com o integrador (4.88 por ciclo).
         -- ----------------------------------------------------------------
         enable <= '1';
         wait_clk(1);
 
-        -- Verificar que saida comecou a crescer
         duty_val := to_integer(unsigned(duty_out));
         assert duty_val > 0
             report "FALHA T3a: Saida deveria ser > 0 com erro positivo"
+            severity error;
+        assert duty_val >= 10000 and duty_val <= 10200
+            report "FALHA T3c: Na habilitacao a saida deveria partir do setpoint (~10078). Valor: " &
+                   integer'image(duty_val)
             severity error;
 
         -- Aguardar convergencia (10 ciclos conforme criterio de aceitacao)
@@ -122,10 +127,12 @@ begin
 
         -- ----------------------------------------------------------------
         -- TESTE 5: Erro negativo (measured > setpoint) -> saida diminui
+        -- erro = -5000: I cai 4.88 por ciclo a partir de ~10100 -> chega a 0
+        -- em ~2070 ciclos
         -- ----------------------------------------------------------------
         setpoint <= std_logic_vector(to_unsigned(5000, 16));
         measured <= std_logic_vector(to_unsigned(10000, 16));
-        wait_clk(20);
+        wait_clk(2500);
         duty_val := to_integer(unsigned(duty_out));
         assert duty_val = 0
             report "FALHA T5: Com erro muito negativo, saida deveria saturar em 0"
@@ -142,9 +149,13 @@ begin
         rst_n <= '1';
         wait_clk(1);
 
+        -- Habilitar com setpoint 0 (pre-carga = 0) e so depois aplicar o
+        -- degrau, para observar a integracao a partir de zero
         enable   <= '1';
-        setpoint <= std_logic_vector(to_unsigned(60000, 16));
+        setpoint <= std_logic_vector(to_unsigned(0, 16));
         measured <= std_logic_vector(to_unsigned(0, 16));
+        wait_clk(2);
+        setpoint <= std_logic_vector(to_unsigned(60000, 16));
         wait_clk(1000);
         duty_val := to_integer(unsigned(duty_out));
         assert duty_val > 55000 and duty_val < 65535
@@ -182,6 +193,34 @@ begin
         duty_val := to_integer(unsigned(duty_out));
         assert duty_val = 0
             report "FALHA T7b: Saida deveria chegar a 0 apos descarregar o integrador: " &
+                   integer'image(duty_val)
+            severity error;
+
+        -- ----------------------------------------------------------------
+        -- TESTE 8: Reentrada sem salto
+        -- Saturar o integrador, desabilitar e reabilitar com outro setpoint:
+        -- a saida deve partir do novo setpoint, nao do valor antigo (65535).
+        -- ----------------------------------------------------------------
+        setpoint <= std_logic_vector(to_unsigned(60000, 16));
+        measured <= std_logic_vector(to_unsigned(0, 16));
+        wait_clk(1300);
+        assert to_integer(unsigned(duty_out)) = 65535
+            report "FALHA T8a: Integrador deveria estar saturado antes do teste"
+            severity error;
+
+        enable <= '0';
+        wait_clk(10);
+        assert duty_out = x"0000"
+            report "FALHA T8b: Desabilitado, saida deveria ser 0"
+            severity error;
+
+        setpoint <= std_logic_vector(to_unsigned(20000, 16));
+        measured <= std_logic_vector(to_unsigned(20000, 16));
+        enable   <= '1';
+        wait_clk(2);
+        duty_val := to_integer(unsigned(duty_out));
+        assert duty_val >= 19900 and duty_val <= 20100
+            report "FALHA T8c: Ao reabilitar, saida deveria partir do novo setpoint (20000), nao do integrador antigo. Valor: " &
                    integer'image(duty_val)
             severity error;
 

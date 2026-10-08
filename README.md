@@ -126,11 +126,11 @@ Veja [docs/05_resultados.md](docs/05_resultados.md) e [docs/06_cosimulacao_pytho
 
 | Volta | Deploy entregue | Harvest | SoC no fim |
 |-------|-----------------|---------|------------|
-| 1 | 2.81 MJ | 1.01 MJ | 25.0% |
-| 2 | 1.33 MJ | 1.33 MJ | 25.0% |
-| 3 | 1.33 MJ | 1.33 MJ | 25.0% |
+| 1 | 2.80 MJ | 1.01 MJ | 25.4% |
+| 2 | 1.27 MJ | 1.31 MJ | 26.3% |
+| 3 | 1.31 MJ | 1.30 MJ | 26.0% |
 
-O regulamento é respeitado (sem FAULT, deploy ≤ 4 MJ/volta, ≤ 120 kW, SoC em [20%, 95%]), mas a partir da volta 2 o carro só gasta o que recupera. A co-simulação também revelou oscilação da FSM no limite de SoC de 25%. Detalhes em [docs/06_cosimulacao_python.md](docs/06_cosimulacao_python.md).
+O regulamento é respeitado (sem FAULT, deploy ≤ 4 MJ/volta, ≤ 120 kW, SoC em [20%, 95%]), mas a partir da volta 2 o carro só gasta o que recupera. A co-simulação revelou dois problemas do controlador, já corrigidos: oscilação da FSM no limite de SoC (agora com histerese 25%/30%) e salto de potência ao reentrar em deploy (agora o PI parte do setpoint). Detalhes em [docs/06_cosimulacao_python.md](docs/06_cosimulacao_python.md).
 
 ![Co-simulação de 3 voltas](docs/img/cosim_race.png)
 

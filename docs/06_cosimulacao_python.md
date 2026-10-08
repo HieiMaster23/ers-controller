@@ -75,7 +75,7 @@ Mesmas equacoes e parametros do capitulo 2, com tres diferencas:
 |-------|---------|----------|
 | `test_pi_tracking` | Acelerador constante em 73% | A potencia entregue converge para 87.9 kW (alvo = 73% de 120 kW) com erro < 2%, e o duty fica acima de 73% (compensando a queda de tensao). |
 | `test_lap_energy_limit` | Acelerador 100% continuo; bateria grande para isolar o limite do regulamento | O VHDL trava em 4.000 MJ e corta o deploy entre 32 e 36 s; a energia real da volta fica entre 3.8 e 4.0 MJ; o deploy volta apos `lap_reset`. |
-| `test_race_3_laps` | Perfil de volta padrao, 3 voltas | Sem FAULT; passa por deploy, harvest K e harvest H; deploy <= 4 MJ/volta; potencia <= 120 kW; SoC em [20%, 95%]. |
+| `test_race_3_laps` | Perfil de volta padrao, 3 voltas | Sem FAULT; passa por deploy, harvest K e harvest H; deploy <= 4 MJ/volta; potencia <= 120 kW; SoC em [20%, 95%]; no maximo 60 trocas de modo (sem oscilacao); potencia nunca mais de 10 kW acima do pedido (partida do PI sem salto). |
 
 ## 6.6 Resultados
 
@@ -83,15 +83,17 @@ Corrida de 3 voltas com o controlador VHDL real:
 
 | Volta | Deploy entregue | Harvest | Energia medida pelo VHDL | SoC no fim |
 |-------|-----------------|---------|--------------------------|------------|
-| 1 | 2.81 MJ | 1.01 MJ | 2.90 MJ | 25.0% |
-| 2 | 1.33 MJ | 1.33 MJ | 1.36 MJ | 25.0% |
-| 3 | 1.33 MJ | 1.33 MJ | 1.36 MJ | 25.0% |
+| 1 | 2.80 MJ | 1.01 MJ | 2.90 MJ | 25.4% |
+| 2 | 1.27 MJ | 1.31 MJ | 1.33 MJ | 26.3% |
+| 3 | 1.31 MJ | 1.30 MJ | 1.36 MJ | 26.0% |
 
 Outros resultados:
 
-- PI: rastreia 87.9 kW e entra na faixa de 2% em 0.74 s.
+- PI: rastreia 87.9 kW e entra na faixa de 2% em 0.44 s.
+- Trocas de modo em 3 voltas: 39 (eram 2131 antes da histerese).
+- Maior excesso de potencia sobre o pedido: 6.3 kW (era 46.1 kW antes da partida sem salto).
 - Deploy pico: 114.5 kW. A queda de tensao impede chegar a 120 kW mesmo com duty de 100%.
-- Teste de limite: corte em 33.5 s, com 3.82 MJ entregues e 4.00 MJ contabilizados.
+- Teste de limite: corte em 33.4 s, com 3.82 MJ entregues e 4.00 MJ contabilizados.
 
 ![Co-simulacao de 3 voltas](img/cosim_race.png)
 
@@ -99,13 +101,13 @@ Outros resultados:
 
 1. **O carro fica "sem bateria" a partir da volta 2.** A primeira volta gasta a carga inicial (70% -> 25%). Depois disso o controlador so consegue gastar o que recupera (~1.3 MJ por volta), bem abaixo do limite de 4 MJ. O resultado anterior (3.82 MJ/volta) vinha do placeholder, cuja planta recuperava energia mesmo quando a FSM nao mandava.
 
-2. **A FSM oscila no limite de SoC (chattering).** Com o SoC parado em 25%, o controlador alterna entre `DEPLOYING` e `HARVESTING_H` a cada poucos passos: o deploy baixa o SoC para menos de 25%, o harvest sobe de volta, e o ciclo se repete (faixas listradas no grafico). Os limiares de SoC nao tem histerese.
+2. **A FSM oscilava no limite de SoC (corrigido).** Com o SoC parado em 25%, o controlador alternava entre `DEPLOYING` e `HARVESTING_H` a cada passo (2131 trocas em 3 voltas): o deploy baixava o SoC para menos de 25% e o harvest subia de volta. **Correcao:** histerese em `ers_fsm.vhd`. O deploy para em 25% e so volta com 30%; o harvest para em 90% e so volta com 85%. Agora o SoC oscila devagar entre 25% e 30%: o MGU-H recarrega ~5% e o MGU-K gasta esses 5% em potencia cheia (39 trocas em 3 voltas).
 
-3. **Pico de potencia ao reentrar em deploy.** O PI mantem o integrador quando e desabilitado. Ao voltar para `DEPLOYING`, ele parte do valor antigo e a potencia da um salto (picos de ~100 kW em t = 43, 103 e 163 s) antes de convergir.
+3. **Pico de potencia ao reentrar em deploy (corrigido).** O PI mantinha o integrador quando desabilitado; ao voltar para `DEPLOYING`, partia do valor antigo e a potencia saltava ate 46 kW acima do pedido. **Correcao:** em `pi_controller.vhd`, na borda de habilitacao o integrador e pre-carregado com o setpoint (feedforward). A saida ja comeca na potencia pedida e o PI so corrige a diferenca. Sobra um overshoot transitorio de ~5% (atraso do inversor e quantizacao do PWM).
 
 4. **O MGU-H nunca recupera durante o deploy.** Os estados da FSM sao exclusivos. No ERS real (regras 2014-2025), o MGU-H podia alimentar o MGU-K diretamente durante a aceleracao.
 
-Os itens 2 e 3 sao comportamentos do RTL que os testbenches isolados nao mostravam. Ficam como proximos passos de projeto.
+Os itens 2 e 3 eram comportamentos do RTL que os testbenches isolados nao mostravam; so apareceram com a malha fechada. Agora ha testes especificos para eles tanto nos testbenches (`tb_ers_fsm` T13-T14, `tb_pi_controller` T3c e T8) quanto na co-simulacao.
 
 ## 6.7 Como executar
 

@@ -69,9 +69,20 @@
 | Condicao | Expressao |
 |----------|-----------|
 | `fault_cond` | `soc < 819 (20%)` OR `soc > 3890 (95%)` |
-| `deploy_cond` | `throttle > 2048` AND `soc > 1024 (25%)` AND `energy < 1024000` |
-| `harvest_k_cond` | `brake_pres > 512` AND `soc < 3685 (90%)` |
-| `harvest_h_cond` | `turbo_rpm > 40000` AND `soc < 3685 (90%)` |
+| `deploy_cond` | `throttle > 2048` AND `deploy_soc_ok` AND `energy < 1024000` |
+| `harvest_k_cond` | `brake_pres > 512` AND `harvest_soc_ok` |
+| `harvest_h_cond` | `turbo_rpm > 40000` AND `harvest_soc_ok` |
+
+### Histerese de SoC:
+
+Sem histerese, com o SoC no limite de 25% a FSM alternava entre `DEPLOYING` e `HARVESTING_H` a cada poucos ms: o deploy baixava o SoC abaixo do limite e o harvest subia de volta. Agora cada permissao tem dois limiares e uma flag registrada:
+
+| Flag | Bloqueia quando | Libera de novo quando | Entre os limiares |
+|------|-----------------|-----------------------|-------------------|
+| `deploy_soc_ok` | `soc <= 1024` (25%) | `soc >= 1229` (30%) | mantem a ultima decisao |
+| `harvest_soc_ok` | `soc >= 3685` (90%) | `soc <= 3481` (85%) | mantem a ultima decisao |
+
+O bloqueio e imediato (combinacional); apos o reset as duas flags comecam bloqueadas ate o SoC passar o limiar de liberacao.
 
 ### Saidas por estado:
 
@@ -121,9 +132,13 @@ O acumulador integral e limitado por clamping a faixa da saida, na escala Q16:
 
 Se `i_accum + KI*error` exceder esses limites, o acumulador trava no limite. Isso evita que o integrador "carregue" excessivamente durante saturacao: quando o erro inverte de sinal, o termo P negativo tira a saida da saturacao ja no ciclo seguinte (verificado em `tb_pi_controller` T7).
 
+### Partida sem salto (bumpless):
+
+No primeiro ciclo apos `enable` subir, o integrador e pre-carregado com o setpoint (feedforward): `i_accum = setpoint << 16`. A saida ja comeca na potencia pedida e o PI so corrige a diferenca (por exemplo, a queda de tensao da bateria). Antes, o integrador guardava o valor da ultima habilitacao e a potencia saltava ate ~46 kW acima do pedido ao reentrar em deploy (visto na co-simulacao, capitulo 6). Verificado em `tb_pi_controller` T3c e T8.
+
 ### Resposta esperada:
 
-Com KP=0.015625 e KI=0.000977, para um degrau de erro=5000:
+Com KP=0.015625 e KI=0.000977, para um degrau de erro=5000 (sem contar a pre-carga do setpoint):
 - P imediato: 0.015625 * 5000 = 78.125
 - I apos 10 ciclos: 0.000977 * 5000 * 10 = 48.8
 - Total apos 10 ciclos: ~127 (saida deve ser > 50, criterio de aceitacao)
@@ -229,7 +244,7 @@ A latencia total do pipeline (entrada -> saida PWM) e de 3 ciclos de clock (60 n
 
 ## 3.8 Testbenches
 
-### tb_ers_fsm — 12 testes:
+### tb_ers_fsm — 14 testes:
 
 | # | Teste | Resultado esperado |
 |---|-------|--------------------|
@@ -245,18 +260,21 @@ A latencia total do pipeline (entrada -> saida PWM) e de 3 ciclos de clock (60 n
 | T10 | Energia excedida | Nao entra DEPLOYING |
 | T11 | SoC > 90% + freio | Nao entra HARVESTING |
 | T12 | Transicao HARVEST_K -> HARVEST_H | HARVESTING_H (010) |
+| T13 | Histerese de deploy | Para em 25%, segue bloqueado em 27%, libera em 30%, ja liberado segue em 27% |
+| T14 | Histerese de harvest | Para em 90%, segue bloqueado em 88%, libera em 85% |
 
-### tb_pi_controller — 7 testes:
+### tb_pi_controller — 8 testes:
 
 | # | Teste | Resultado esperado |
 |---|-------|--------------------|
 | T1 | Reset | duty = 0 |
 | T2 | Desabilitado | duty = 0 |
-| T3 | Degrau positivo | duty cresce (> 0 apos 1 ciclo, > 50 apos 10) |
+| T3 | Degrau positivo | parte do setpoint (~10078) no 1o ciclo e cresce com o integrador |
 | T4 | Erro zero | duty estabiliza |
 | T5 | Erro negativo | duty = 0 (saturacao inferior) |
 | T6 | Erro muito grande | perto de saturar apos 1000 ciclos; duty = 65535 apos 1200 |
 | T7 | Anti-windup | Apos 5000 ciclos saturado, sai da saturacao em 2 ciclos ao inverter o erro e zera apos ~1200 |
+| T8 | Reentrada sem salto | Integrador saturado, desabilita e reabilita com setpoint 20000: saida parte de ~20000, nao de 65535 |
 
 ### tb_power_arbiter — 7 testes:
 

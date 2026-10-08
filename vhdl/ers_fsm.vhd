@@ -5,6 +5,13 @@
 -- Descricao: Maquina de estados principal do controlador ERS.
 --            Decide o modo de operacao (STANDBY, HARVESTING_K, HARVESTING_H,
 --            DEPLOYING, FAULT) com base nos sinais da planta.
+--
+-- Histerese de SoC (evita oscilar entre deploy e harvest no limite):
+--   deploy  : bloqueado quando SoC <= 25%, liberado de novo so com SoC >= 30%
+--   harvest : bloqueado quando SoC >= 90%, liberado de novo so com SoC <= 85%
+--   Entre os dois limiares vale a ultima decisao (flag registrada). Apos o
+--   reset as duas flags comecam bloqueadas ate o SoC passar o limiar de
+--   liberacao.
 -- ============================================================================
 
 library ieee;
@@ -48,8 +55,12 @@ architecture rtl of ers_fsm is
     constant THROTTLE_THRESH: unsigned(11 downto 0) := to_unsigned(2048, 12);
     -- soc < 90% (0.90 * 4095 = 3685) => pode fazer harvest
     constant SOC_HARVEST_MAX: unsigned(11 downto 0) := to_unsigned(3685, 12);
+    -- harvest volta a ser permitido com soc <= 85% (0.85 * 4095 = 3481)
+    constant SOC_HARVEST_RESUME : unsigned(11 downto 0) := to_unsigned(3481, 12);
     -- soc > 25% (0.25 * 4095 = 1024) => pode fazer deploy
     constant SOC_DEPLOY_MIN : unsigned(11 downto 0) := to_unsigned(1024, 12);
+    -- deploy volta a ser permitido com soc >= 30% (0.30 * 4095 = 1229)
+    constant SOC_DEPLOY_RESUME  : unsigned(11 downto 0) := to_unsigned(1229, 12);
     -- soc < 20% (0.20 * 4095 = 819) => FAULT low
     constant SOC_FAULT_LOW  : unsigned(11 downto 0) := to_unsigned(819, 12);
     -- soc > 95% (0.95 * 4095 = 3890) => FAULT high
@@ -69,6 +80,12 @@ architecture rtl of ers_fsm is
     signal soc_u     : unsigned(11 downto 0);
     signal turbo_u   : unsigned(15 downto 0);
     signal energy_u  : unsigned(23 downto 0);
+
+    -- Histerese de SoC: flag combinacional + memoria registrada
+    signal deploy_soc_ok   : std_logic;
+    signal harvest_soc_ok  : std_logic;
+    signal deploy_soc_reg  : std_logic;
+    signal harvest_soc_reg : std_logic;
 
     -- Condicoes de transicao
     signal fault_cond   : std_logic;
@@ -93,15 +110,25 @@ begin
     fault_cond     <= '1' when (soc_u < SOC_FAULT_LOW) or
                                 (soc_u > SOC_FAULT_HIGH) else '0';
 
+    -- Histerese: bloqueio imediato no limite; liberacao so apos o limiar de
+    -- retomada; entre os dois, mantem a decisao anterior (flag registrada).
+    deploy_soc_ok  <= '1' when (soc_u > SOC_DEPLOY_MIN) and
+                               (deploy_soc_reg = '1' or
+                                soc_u >= SOC_DEPLOY_RESUME) else '0';
+
+    harvest_soc_ok <= '1' when (soc_u < SOC_HARVEST_MAX) and
+                               (harvest_soc_reg = '1' or
+                                soc_u <= SOC_HARVEST_RESUME) else '0';
+
     deploy_cond    <= '1' when (throttle_u > THROTTLE_THRESH) and
-                                (soc_u > SOC_DEPLOY_MIN) and
+                                (deploy_soc_ok = '1') and
                                 (energy_u < ENERGY_MAX) else '0';
 
     harvest_k_cond <= '1' when (brake_u > BRAKE_THRESH) and
-                                (soc_u < SOC_HARVEST_MAX) else '0';
+                                (harvest_soc_ok = '1') else '0';
 
     harvest_h_cond <= '1' when (turbo_u > TURBO_THRESH) and
-                                (soc_u < SOC_HARVEST_MAX) else '0';
+                                (harvest_soc_ok = '1') else '0';
 
     -- ========================================================================
     -- Logica de proximo estado (combinacional)
@@ -170,14 +197,19 @@ begin
     end process;
 
     -- ========================================================================
-    -- Registrador de estado (sincrono clk, reset assincrono rst_n)
+    -- Registrador de estado e flags de histerese
+    -- (sincrono clk, reset assincrono rst_n)
     -- ========================================================================
     process(clk, rst_n)
     begin
         if rst_n = '0' then
-            state_reg <= STANDBY;
+            state_reg       <= STANDBY;
+            deploy_soc_reg  <= '0';
+            harvest_soc_reg <= '0';
         elsif rising_edge(clk) then
-            state_reg <= state_next;
+            state_reg       <= state_next;
+            deploy_soc_reg  <= deploy_soc_ok;
+            harvest_soc_reg <= harvest_soc_ok;
         end if;
     end process;
 

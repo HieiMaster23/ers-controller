@@ -61,7 +61,10 @@ class CosimRun:
     rows: list = field(default_factory=list)
     laps: list = field(default_factory=list)
     modes_seen: set = field(default_factory=set)
+    mode_changes: int = 0         # trocas de ers_mode (amostradas a cada passo)
+    max_excess_kw: float = 0.0    # maior (potencia entregue - setpoint) em deploy
     t: float = 0.0
+    _last_mode: int | None = None
 
     async def reset(self) -> None:
         dut = self.dut
@@ -114,7 +117,14 @@ class CosimRun:
             duty_k = dut.duty_k_cnt.value.to_unsigned() / PWM_COUNTS
             duty_h = dut.duty_h_cnt.value.to_unsigned() / PWM_COUNTS
             self.modes_seen.add(mode)
+            if self._last_mode is not None and mode != self._last_mode:
+                self.mode_changes += 1
+            self._last_mode = mode
             self.plant.step(dt, inp, mode, duty_k, duty_h)
+            if mode == DEPLOYING:
+                setpoint_w = inp.throttle_adc * 16 / 65535 * P_SCALE_W
+                self.max_excess_kw = max(
+                    self.max_excess_kw, (self.plant.p_deploy - setpoint_w) / 1e3)
 
             if k % log_every == 0:
                 self.rows.append({
@@ -245,9 +255,19 @@ async def test_race_3_laps(dut):
     dut._log.info("SoC min/max: %.1f%% / %.1f%%, deploy pico %.1f kW, modos: %s",
                   min(socs), max(socs), p_max,
                   sorted(MODE_NAMES[m] for m in run.modes_seen))
+    dut._log.info("Trocas de modo: %d; maior excesso de potencia sobre o "
+                  "setpoint: %.1f kW", run.mode_changes, run.max_excess_kw)
 
     assert FAULT not in run.modes_seen, "controlador entrou em FAULT"
     assert {DEPLOYING, HARVESTING_K, HARVESTING_H} <= run.modes_seen
     assert all(lap.e_deploy_mj <= 4.0 for lap in run.laps), "excedeu 4 MJ/volta"
     assert p_max <= 120.0, f"potencia de deploy acima de 120 kW: {p_max}"
     assert 20.0 <= min(socs) and max(socs) <= 95.0, "SoC fora de [20%, 95%]"
+    # Histerese de SoC: sem oscilacao rapida entre deploy e harvest
+    assert run.mode_changes <= 60, (
+        f"FSM oscilando: {run.mode_changes} trocas de modo em 3 voltas")
+    # Partida sem salto do PI: ao entrar em deploy a potencia nao pode saltar
+    # acima do pedido. Sobra um overshoot transitorio de ~5% (atraso do
+    # inversor + quantizacao do PWM); sem a pre-carga o salto era de ~43 kW.
+    assert run.max_excess_kw <= 10.0, (
+        f"pico de potencia {run.max_excess_kw:.1f} kW acima do setpoint")

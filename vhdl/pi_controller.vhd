@@ -6,6 +6,12 @@
 --            Regula o duty cycle do PWM do MGU-K com base no erro entre
 --            setpoint e valor medido. Anti-windup por clamping no integrador.
 --
+-- Partida sem salto (bumpless): no primeiro ciclo apos enable subir, o
+--   integrador e pre-carregado com o setpoint (feedforward). A saida ja
+--   comeca na potencia pedida e o PI so corrige o erro restante. Sem isso,
+--   o integrador guardava o valor da ultima vez que esteve habilitado e a
+--   saida dava um salto ao reentrar em deploy.
+--
 -- Formato Q32.16: 32 bits inteiros + 16 bits fracionarios = 48 bits signed.
 --   Os ganhos KP/KI sao dados em Q16 (1.0 = 65536).
 --   48 bits sao necessarios para o integrador alcancar OUT_MAX em Q16
@@ -60,6 +66,9 @@ architecture rtl of pi_controller is
     -- Saida saturada
     signal output_sat  : integer range 0 to 65535;
 
+    -- enable do ciclo anterior (detecta a borda de habilitacao)
+    signal enable_d    : std_logic;
+
 begin
 
     -- ========================================================================
@@ -73,6 +82,7 @@ begin
     -- ========================================================================
     process(clk, rst_n)
         variable p_calc    : signed(47 downto 0);
+        variable i_base    : signed(47 downto 0);
         variable i_new     : signed(47 downto 0);
         variable sum_calc  : signed(47 downto 0);
         variable out_q0    : signed(47 downto 0);
@@ -83,16 +93,32 @@ begin
             i_term     <= (others => '0');
             pi_sum     <= (others => '0');
             output_sat <= 0;
+            enable_d   <= '0';
 
         elsif rising_edge(clk) then
+            enable_d <= enable;
+
             if enable = '1' then
+                -- Ponto de partida do integrador: setpoint na borda de
+                -- habilitacao (feedforward), valor acumulado nos demais ciclos
+                if enable_d = '0' then
+                    i_base := shift_left(resize(signed('0' & setpoint), 48), 16);
+                    if i_base > INTEG_MAX then
+                        i_base := INTEG_MAX;
+                    elsif i_base < INTEG_MIN then
+                        i_base := INTEG_MIN;
+                    end if;
+                else
+                    i_base := i_accum;
+                end if;
+
                 -- Termo proporcional: P = KP * error
                 -- error_val (17 bits) * KP (18 bits) -> 35 bits
                 p_calc := resize(error_val * to_signed(KP, 18), 48);
                 p_term <= p_calc;
 
                 -- Termo integral: I_accum += KI * error
-                i_new := i_accum + resize(error_val * to_signed(KI, 18), 48);
+                i_new := i_base + resize(error_val * to_signed(KI, 18), 48);
 
                 -- Anti-windup: clamping do acumulador
                 if i_new > INTEG_MAX then
@@ -103,10 +129,10 @@ begin
                     i_accum <= i_new;
                 end if;
 
-                i_term <= i_accum;
+                i_term <= i_base;
 
                 -- Soma P + I
-                sum_calc := p_calc + i_accum;
+                sum_calc := p_calc + i_base;
                 pi_sum   <= sum_calc;
 
                 -- Converter de Q16 para inteiro: shift right 16
@@ -123,7 +149,8 @@ begin
                 end if;
 
             else
-                -- Desabilitado: zerar saida, manter integrador
+                -- Desabilitado: zerar saida (o integrador sera recarregado
+                -- com o setpoint na proxima habilitacao)
                 output_sat <= 0;
             end if;
         end if;

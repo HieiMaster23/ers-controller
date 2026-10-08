@@ -237,6 +237,73 @@ begin
             severity error;
 
         -- ----------------------------------------------------------------
+        -- TESTE 13: Histerese de deploy (bloqueia em 25%, libera em 30%)
+        -- 1024 = 25%, 1229 = 30%
+        -- ----------------------------------------------------------------
+        brake_pres <= (others => '0');
+        turbo_rpm  <= (others => '0');
+        throttle   <= std_logic_vector(to_unsigned(3000, 12));
+        soc_in     <= std_logic_vector(to_unsigned(2867, 12)); -- 70%
+        wait_clk(2);
+        assert ers_mode = "011"
+            report "FALHA T13a: Deveria estar em DEPLOYING com SoC 70%"
+            severity error;
+
+        soc_in <= std_logic_vector(to_unsigned(1000, 12));   -- 24.4%
+        wait_clk(2);
+        assert ers_mode = "000"
+            report "FALHA T13b: SoC <= 25% deveria encerrar o deploy"
+            severity error;
+
+        soc_in <= std_logic_vector(to_unsigned(1100, 12));   -- 26.9%
+        wait_clk(5);
+        assert ers_mode = "000"
+            report "FALHA T13c: Entre 25% e 30% o deploy deve continuar bloqueado"
+            severity error;
+
+        soc_in <= std_logic_vector(to_unsigned(1240, 12));   -- 30.3%
+        wait_clk(2);
+        assert ers_mode = "011"
+            report "FALHA T13d: SoC >= 30% deveria liberar o deploy"
+            severity error;
+
+        soc_in <= std_logic_vector(to_unsigned(1100, 12));   -- 26.9%
+        wait_clk(5);
+        assert ers_mode = "011"
+            report "FALHA T13e: Ja liberado, deploy deve seguir ate 25%"
+            severity error;
+
+        -- ----------------------------------------------------------------
+        -- TESTE 14: Histerese de harvest (bloqueia em 90%, libera em 85%)
+        -- 3685 = 90%, 3481 = 85%
+        -- ----------------------------------------------------------------
+        throttle   <= (others => '0');
+        brake_pres <= std_logic_vector(to_unsigned(2000, 12));
+        soc_in     <= std_logic_vector(to_unsigned(3600, 12)); -- 87.9%
+        wait_clk(2);
+        assert ers_mode = "001"
+            report "FALHA T14a: Harvest liberado (veio de SoC baixo) com SoC 87.9%"
+            severity error;
+
+        soc_in <= std_logic_vector(to_unsigned(3700, 12));   -- 90.4%
+        wait_clk(2);
+        assert ers_mode = "000"
+            report "FALHA T14b: SoC >= 90% deveria encerrar o harvest"
+            severity error;
+
+        soc_in <= std_logic_vector(to_unsigned(3600, 12));   -- 87.9%
+        wait_clk(5);
+        assert ers_mode = "000"
+            report "FALHA T14c: Entre 85% e 90% o harvest deve continuar bloqueado"
+            severity error;
+
+        soc_in <= std_logic_vector(to_unsigned(3450, 12));   -- 84.2%
+        wait_clk(2);
+        assert ers_mode = "001"
+            report "FALHA T14d: SoC <= 85% deveria liberar o harvest"
+            severity error;
+
+        -- ----------------------------------------------------------------
         -- Fim dos testes
         -- ----------------------------------------------------------------
         brake_pres  <= (others => '0');

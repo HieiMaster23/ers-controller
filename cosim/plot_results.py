@@ -131,20 +131,20 @@ def plot(cols: dict, out: Path, title: str) -> None:
     ax = axes[2]
     style_axis(ax, "Potencia (kW)")
     # (coluna, cor, nome, deslocamento do rotulo de pico, alinhamento)
-    series = [("p_deploy_kw", DEPLOY, "Deploy", (6, -3), "left"),
-              ("p_harv_k_kw", HARV_K, "Harvest K", (-8, 0), "right"),
-              ("p_harv_h_kw", HARV_H, "Harvest H", (6, -3), "left")]
+    series = [("p_deploy_kw", DEPLOY, "Deploy", (6, -3), "left", "top"),
+              ("p_harv_k_kw", HARV_K, "Harvest K", (6, 3), "left", "bottom"),
+              ("p_harv_h_kw", HARV_H, "Harvest H", (6, -3), "left", "top")]
     for key, color, *_ in series:
         ax.plot(t, cols[key], color=color, linewidth=1.6)
     ax.axhline(120, color=INK_2, linewidth=1, linestyle=":")
     ax.annotate("limite 120 kW", (0, 120), xytext=(2, 3),
                 textcoords="offset points", fontsize=8, color=INK_2)
-    for key, color, name, offset, ha in series:
+    for key, color, name, offset, ha, va in series:
         # Rotulo no pico de cada serie
         i = max(range(len(t)), key=lambda j: cols[key][j])
         ax.annotate(f"{name} ({cols[key][i]:.0f} kW)", (t[i], cols[key][i]),
                     xytext=offset, textcoords="offset points", fontsize=8,
-                    ha=ha, va="top", color=INK)
+                    ha=ha, va=va, color=INK)
         ax.plot([t[i]], [cols[key][i]], "o", color=color, markersize=5,
                 markeredgecolor=SURFACE, markeredgewidth=1.5)
     ax.set_ylim(0, 135)
@@ -157,8 +157,9 @@ def plot(cols: dict, out: Path, title: str) -> None:
     ax.axhspan(0, 20, color=GRID, linewidth=0)
     ax.axhspan(95, 100, color=GRID, linewidth=0)
     ax.plot(t, cols["soc_pct"], color=INK, linewidth=1.8)
-    for level, text, dy, va in [(25, "deploy so acima de 25%", -3, "top"),
-                                (90, "harvest so abaixo de 90%", 3, "bottom")]:
+    for level, text, dy, va in [
+            (25, "deploy para em 25% e so volta com 30%", -3, "top"),
+            (90, "harvest para em 90% e so volta com 85%", 3, "bottom")]:
         ax.axhline(level, color=INK_2, linewidth=1, linestyle=":")
         ax.annotate(text, (t_end, level), xytext=(-4, dy), ha="right", va=va,
                     textcoords="offset points", fontsize=8, color=INK_2)
