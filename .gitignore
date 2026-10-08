@@ -139,3 +139,5 @@ figures/
 *.bak
 *.old
 *.log
+build/
+__pycache__/

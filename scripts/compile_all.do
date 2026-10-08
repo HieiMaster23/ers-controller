@@ -34,6 +34,9 @@ vcom -93 -work work ../testbench/tb_pi_controller.vhd
 echo "Compilando tb_power_arbiter.vhd..."
 vcom -93 -work work ../testbench/tb_power_arbiter.vhd
 
+echo "Compilando tb_energy_meter.vhd..."
+vcom -93 -work work ../testbench/tb_energy_meter.vhd
+
 echo "Compilando tb_ers_top.vhd..."
 vcom -93 -work work ../testbench/tb_ers_top.vhd
 

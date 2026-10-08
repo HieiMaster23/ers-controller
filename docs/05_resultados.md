@@ -38,14 +38,17 @@ A simulacao principal foi executada em modo **placeholder** (sem HDL Verifier), 
 
 ## 5.3 Resultados dos Testbenches VHDL
 
-Executados em modo standalone no ModelSim via `do sim_standalone.do`:
+Executados com GHDL via `./scripts/run_tests.sh` (tambem no GitHub Actions a cada push) ou no ModelSim via `do sim_standalone.do`:
 
 | Testbench | Testes | Resultado |
 |-----------|--------|-----------|
 | `tb_ers_fsm` | 12 testes (transicoes, prioridades, FAULT) | Todos passaram |
 | `tb_pi_controller` | 7 testes (reset, step, saturacao, anti-windup) | Todos passaram |
 | `tb_power_arbiter` | 7 testes (deploy, harvest K/H, corte energia, PWM) | Todos passaram |
-| `tb_ers_top` | 7 fases integradas (standby -> deploy -> harvest K -> harvest H -> fault -> recovery -> lap_reset) | Todos passaram |
+| `tb_energy_meter` | 8 testes (valores numericos, saturacao em 4 MJ, sem wrap, lap reset) | Todos passaram |
+| `tb_ers_top` | 9 fases integradas (standby -> deploy -> harvest K -> harvest H -> fault -> recovery -> lap_reset -> corte 4 MJ -> nova volta) | Todos passaram |
+
+> **Nota (revisao 2026-10):** na versao original, os testbenches nao terminavam sozinhos e nao retornavam erro, entao falhas passavam despercebidas. Ao migrar para GHDL com `--assert-level=error`, `tb_pi_controller` falhava (T3a, T6) e `tb_ers_top` mostrava `energy_used` preso abaixo de 256. As causas estao nas correcoes #9 a #12 abaixo.
 
 Sequencia de estados observada em `tb_ers_top`:
 `000 -> 001 -> 000 -> 010 -> 011 -> 111 -> 000 -> 011 -> 000 -> 001 -> 010 -> 000`
@@ -80,9 +83,9 @@ Correspondente a: STANDBY -> HARVESTING_K -> STANDBY -> HARVESTING_H -> DEPLOYIN
 ### 5.4.4 Energy Meter (energy_meter.vhd)
 
 **Integracao com precisao Q8** em kJ:
-- Acumulador de 40 bits internamente, saida truncada para 24 bits.
-- Escala `INTEG_SCALE=157` calibra a integracao para produzir kJ corretos a partir de `duty * V_bus * t`.
-- Reset via `lap_reset` apos cada volta.
+- Acumulador de 64 bits internamente (40 bits fracionarios extras), saida de 24 bits.
+- Escala `INTEG_SCALE=10308` (calculada pelos generics `CLK_HZ`/`P_MAX_W`), erro < 0.001%.
+- Satura exatamente em 4 MJ; reset via `lap_reset` apos cada volta.
 
 ### 5.4.5 Planta Simulink
 
@@ -122,13 +125,19 @@ Correspondente a: STANDBY -> HARVESTING_K -> STANDBY -> HARVESTING_H -> DEPLOYIN
 | 6 | SoC ultrapassava 100% (chegava a 234%) | `UpperSaturationLimit` definido mas sem `LimitOutput='on'` | Adicionar `'LimitOutput','on'` ao Integrator |
 | 7 | SoC nunca descia durante deploy | Controlador nao realimentava potencia de descarga na planta | Nova porta `P_deploy_in` na Planta, com `Sum_P` algebrico (`++-`) |
 | 8 | Energia por volta nao tinha corte no placeholder | Placeholder nao replicava limite de 4 MJ | Adicionar integrador de energia com `ExternalReset='rising'` + AND de 3 entradas |
+| 9 | `energy_meter` zerava sozinho e nunca chegava a 4 MJ | Saturacao comparava `accum(39:24)` com `ENERGY_MAX(39:24) = 0`: ao passar de 2^24 o acumulador era zerado em vez de travar; `energy_used` nunca passava de 255 | Acumulador de 64 bits, comparacao com o limite completo, trava em 1024000 |
+| 10 | Escala de energia 1000x maior | Conta `1.831 W * 20 ns` resultou em 3.66e-5 J (correto: 3.66e-8 J) | `INTEG_SCALE` calculado a partir dos generics `CLK_HZ` e `P_MAX_W` |
+| 11 | Termo integral do PI quase sem efeito | Com 32 bits, `INTEG_MAX = OUT_MAX*256` limitava a contribuicao integral a 256 de 65535 | Termos em 48 bits, `INTEG_MAX = OUT_MAX * 2^16` |
+| 12 | Falhas de testbench passavam despercebidas | Clock nunca parava e asserts nao interrompiam; T3a amostrava a saida na mesma borda em que era atualizada | `sim_done` para o clock, GHDL com `--assert-level=error`, amostragem 1 ns apos a borda, CI no GitHub Actions |
 
 ## 5.6 Limitacoes Conhecidas
 
-1. **Modo co-simulacao real nao testado nesta execucao**: requer licenca HDL Verifier + configuracao manual do bloco de mapeamento de sinais. A infraestrutura (`sim_cosim.do`, bloco `HDL Cosim`) esta pronta; falta apenas a licenca.
+1. **Modo co-simulacao real (Simulink) nao testado nesta execucao**: requer licenca HDL Verifier + configuracao manual do bloco de mapeamento de sinais. A infraestrutura (`sim_cosim.do`, bloco `HDL Cosim`) esta pronta; falta apenas a licenca. A co-simulacao livre do [capitulo 6](06_cosimulacao_python.md) roda o VHDL real em malha fechada.
 2. **Placeholder nao exercita PI**: em modo placeholder, o duty de deploy vem direto do throttle (`duty = throttle * 16`), sem malha PI. O PI esta validado via `tb_pi_controller` mas nao integrado na co-simulacao em modo placeholder.
 3. **Nao ha validacao em hardware real**: projeto e apenas simulado; sintese em FPGA nao foi realizada.
 4. **Cenario unico**: uma volta com perfil fixo; nao ha variacoes de condicoes de pista (chuva, safety car, ultrapassagens).
+5. ~~**Realimentacao do PI sem significado fisico**~~ (resolvido no capitulo 6): o valor medido do PI era `speed_rpm`, comparado com `throttle * 16`. Agora e a nova porta `p_mguk_meas` (potencia de deploy medida).
+6. **PWM sem direcao**: `pwm_mguk` nao indica se o MGU-K esta tracionando ou gerando. Necessario um sinal de modo/direcao para acionar uma ponte H real.
 
 ## 5.7 Propostas de Melhoria
 

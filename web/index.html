@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ERS ao Vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: mesa de telemetria de box. Carro e controles a esquerda (o que
+   acontece), estado do controlador a direita (o que ele decide), graficos
+   embaixo. Cores das series = mesmas do grafico da co-simulacao. */
+:root {
+  --bg: #eef1f4;
+  --surface: #fbfcfd;
+  --surface-2: #e4e9ee;
+  --ink: #111820;
+  --ink-2: #4b5664;
+  --ink-3: #78838f;
+  --line: #d3dae2;
+  --focus: #2a78d6;
+  --deploy: #2a78d6;
+  --harv-k: #eb6834;
+  --harv-h: #1baf7a;
+  --standby: #b9c1ca;
+  --fault: #d93a39;
+  --heat: #c2410c;
+  --car: #2b3542;
+  --car-2: #4b5664;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1217;
+    --surface: #151c23;
+    --surface-2: #1d262f;
+    --ink: #e7ecf1;
+    --ink-2: #a3aebb;
+    --ink-3: #75818e;
+    --line: #29333e;
+    --focus: #3987e5;
+    --deploy: #3987e5;
+    --harv-k: #d95926;
+    --harv-h: #199e70;
+    --standby: #4a5562;
+    --fault: #e66767;
+    --heat: #f07a3a;
+    --car: #6f7c8a;
+    --car-2: #8a96a3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1217;
+  --surface: #151c23;
+  --surface-2: #1d262f;
+  --ink: #e7ecf1;
+  --ink-2: #a3aebb;
+  --ink-3: #75818e;
+  --line: #29333e;
+  --focus: #3987e5;
+  --deploy: #3987e5;
+  --harv-k: #d95926;
+  --harv-h: #199e70;
+  --standby: #4a5562;
+  --fault: #e66767;
+  --heat: #f07a3a;
+  --car: #6f7c8a;
+  --car-2: #8a96a3;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 20px 40px;
+  display: grid;
+  gap: 16px;
+}
+
+/* ---------- Cabecalho ---------- */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.top h1 {
+  margin: 0;
+  font: 700 2.6rem/1 var(--font-display);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+.top h1 span { color: var(--deploy); }
+.top p {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.timing {
+  display: flex;
+  gap: 18px;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+.timing div { display: grid; }
+.timing small {
+  font: 600 0.72rem/1.2 var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.timing b { font-size: 1.5rem; font-weight: 500; }
+
+/* ---------- Grade principal ---------- */
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.col { display: grid; gap: 16px; min-width: 0; }
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+  min-width: 0;
+}
+.panel h2 {
+  margin: 0 0 10px;
+  font: 600 0.78rem/1.2 var(--font-body);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---------- Carro ---------- */
+.car svg { display: block; width: 100%; height: auto; }
+.car .body { fill: var(--surface-2); stroke: var(--car-2); stroke-width: 1.5; }
+.car .wheel { fill: var(--car); }
+.car .comp { fill: var(--surface); stroke: var(--car-2); stroke-width: 1.5; }
+.car .comp.on-deploy { stroke: var(--deploy); stroke-width: 2.5; }
+.car .comp.on-k { stroke: var(--harv-k); stroke-width: 2.5; }
+.car .comp.on-h { stroke: var(--harv-h); stroke-width: 2.5; }
+.car text {
+  font: 600 15px var(--font-body);
+  fill: var(--ink);
+}
+.car text.sub { font: 400 12.5px var(--font-data); fill: var(--ink-2); }
+.car .flow {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 2 14;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.car .flow.active { opacity: 1; }
+.car .flow.deploy { stroke: var(--deploy); }
+.car .flow.k { stroke: var(--harv-k); }
+.car .flow.h { stroke: var(--harv-h); }
+.car .track { fill: none; stroke: var(--line); stroke-width: 5; stroke-linecap: round; }
+.car .heat { fill: var(--heat); opacity: 0; transition: opacity 0.2s; }
+.car .bat-fill { fill: var(--deploy); opacity: 0.3; }
+.car .bat-tick { stroke: var(--ink-3); stroke-width: 1; }
+.car-caption {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: 0.86rem;
+}
+
+/* ---------- Controles ---------- */
+.controls { display: grid; gap: 14px; }
+.pedals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.pedal {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 14px 12px;
+  font: 700 1.35rem/1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.pedal kbd {
+  font: 500 0.75rem var(--font-data);
+  color: var(--ink-3);
+}
+.pedal .level {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 0;
+  opacity: 0.22;
+  pointer-events: none;
+}
+.pedal.throttle .level { background: var(--deploy); }
+.pedal.brake .level { background: var(--harv-k); }
+.pedal[aria-pressed="true"] { border-color: var(--ink-2); }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.seg button, .btn {
+  appearance: none;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: 500 0.86rem var(--font-body);
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.btn { border: 1px solid var(--line); border-radius: var(--radius); }
+.btn:hover, .seg button:hover { color: var(--ink); }
+button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.hint { margin: 0; color: var(--ink-3); font-size: 0.82rem; }
+
+/* ---------- Estado do controlador ---------- */
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  font: 700 1.25rem/1.2 var(--font-display);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--surface-2);
+}
+.mode-pill i {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--standby);
+}
+.mode-pill code {
+  font: 500 0.8rem var(--font-data);
+  color: var(--ink-3);
+  text-transform: none;
+}
+.explain { margin: 10px 0 0; text-wrap: pretty; }
+.explain strong { font-weight: 600; }
+.reason {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 0.88rem;
+}
+.fsm svg { display: block; width: 100%; height: auto; max-width: 420px; margin: 0 auto; }
+.fsm .edge { stroke: var(--line); stroke-width: 2; fill: none; }
+.fsm .node rect { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.5; transition: fill 0.2s; }
+.fsm .node text { font: 600 12px var(--font-body); fill: var(--ink-2); text-anchor: middle; }
+.fsm .node.active text { fill: #ffffff; }
+.fsm .node.active rect { stroke: transparent; }
+
+.gauges { display: grid; gap: 14px; }
+.gauge-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.gauge-head span { color: var(--ink-2); font-size: 0.88rem; }
+.gauge-head b {
+  font: 500 1.05rem var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+.bar {
+  position: relative;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+.bar > .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--deploy);
+}
+.bar > .mark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--ink-3);
+}
+.bar > .zone {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: repeating-linear-gradient(135deg, transparent 0 4px, var(--line) 4px 6px);
+}
+.bar-scale {
+  position: relative;
+  height: 16px;
+  font: 400 0.7rem var(--font-data);
+  color: var(--ink-3);
+}
+.bar-scale span { position: absolute; top: 2px; transform: translateX(-50%); }
+.readouts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+.readout { display: grid; gap: 2px; min-width: 0; }
+.readout small {
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.readout small i { width: 10px; height: 3px; border-radius: 2px; flex: none; }
+.readout b {
+  font: 500 1.3rem/1.1 var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+.readout b em { font-style: normal; font-size: 0.8rem; color: var(--ink-3); margin-left: 3px; }
+
+/* ---------- Graficos ---------- */
+.charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: -2px 0 8px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; }
+.chart-box { position: relative; }
+.chart-box canvas { display: block; width: 100%; height: 190px; }
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: 400 0.78rem/1.4 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+/* ---------- Voltas e laboratorio ---------- */
+.bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+th, td {
+  text-align: right;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th:first-child, td:first-child { text-align: left; }
+th {
+  font: 600 0.72rem var(--font-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+td { font: 400 0.9rem var(--font-data); }
+tr.current td { color: var(--ink-2); }
+.lab { display: grid; gap: 12px; }
+.lab label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.lab input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--deploy); }
+.lab label span { display: grid; }
+.lab label small { color: var(--ink-2); font-size: 0.84rem; }
+.lab .range { display: grid; gap: 4px; }
+.lab .range div { display: flex; justify-content: space-between; font-size: 0.9rem; }
+.lab .range b { font: 500 0.9rem var(--font-data); }
+.lab input[type="range"] { width: 100%; accent-color: var(--deploy); }
+
+.foot {
+  color: var(--ink-3);
+  font-size: 0.84rem;
+  max-width: 90ch;
+}
+.foot a { color: var(--ink-2); }
+
+@media (max-width: 900px) {
+  .main, .charts, .bottom { grid-template-columns: minmax(0, 1fr); }
+  .top h1 { font-size: 2.1rem; }
+}
+@media (max-width: 480px) {
+  .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .timing { gap: 12px; }
+  .timing b { font-size: 1.2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .car .flow { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="top">
+    <div>
+      <h1>ERS <span>ao vivo</span></h1>
+      <p>Como um carro de Fórmula 1 guarda a energia da frenagem e do turbo e devolve na aceleração. As decisões vêm do mesmo controlador escrito em VHDL neste projeto.</p>
+    </div>
+    <div class="timing" aria-live="off">
+      <div><small>Volta</small><b id="lapNo">1</b></div>
+      <div><small>Tempo de volta</small><b id="lapTime">0:00.0</b></div>
+      <div><small>Última</small><b id="lastLap">–</b></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <section class="panel car" aria-labelledby="carTitle">
+        <h2 id="carTitle">Fluxo de energia no carro</h2>
+        <svg viewBox="20 30 610 240" role="img" aria-labelledby="carDesc">
+          <desc id="carDesc">Esquema do carro visto de cima, com o MGU-K no eixo traseiro, o MGU-H no turbo e a bateria no centro. Setas animadas mostram para onde a energia está indo.</desc>
+          <!-- Carroceria (vista de cima, frente a direita) -->
+          <path class="body" d="M40 150 C40 116 70 102 110 100 L250 94 C290 74 360 72 410 90 L520 110 C575 118 610 132 618 150 C610 168 575 182 520 190 L410 210 C360 228 290 226 250 206 L110 200 C70 198 40 184 40 150 Z"/>
+          <!-- Rodas -->
+          <rect class="wheel" x="82" y="48" width="66" height="34" rx="6"/>
+          <rect class="wheel" x="82" y="218" width="66" height="34" rx="6"/>
+          <rect class="wheel" x="474" y="58" width="58" height="28" rx="6"/>
+          <rect class="wheel" x="474" y="214" width="58" height="28" rx="6"/>
+          <!-- Calor nos freios dianteiros (energia perdida) -->
+          <ellipse id="heatF1" class="heat" cx="503" cy="72" rx="40" ry="22"/>
+          <ellipse id="heatF2" class="heat" cx="503" cy="228" rx="40" ry="22"/>
+
+          <!-- Trilhas e fluxos -->
+          <path class="track" d="M140 168 L262 168"/>
+          <path class="track" d="M238 122 C250 122 256 128 262 134"/>
+          <path id="flowK" class="flow k" d="M140 168 L262 168"/>
+          <path id="flowH" class="flow h" d="M238 122 C250 122 256 128 262 134"/>
+
+          <!-- Componentes -->
+          <g>
+            <rect id="compK" class="comp" x="56" y="140" width="84" height="54" rx="5"/>
+            <text x="98" y="163" text-anchor="middle">MGU-K</text>
+            <text class="sub" x="98" y="182" text-anchor="middle" id="labK">0 kW</text>
+          </g>
+          <g>
+            <rect id="compH" class="comp" x="154" y="104" width="84" height="36" rx="5"/>
+            <text x="196" y="122" text-anchor="middle">MGU-H</text>
+            <text class="sub" x="196" y="135" text-anchor="middle" id="labH">turbo</text>
+          </g>
+          <g>
+            <rect class="comp" x="262" y="116" width="150" height="70" rx="5"/>
+            <rect id="batFill" class="bat-fill" x="264" y="118" width="0" height="66" rx="3"/>
+            <line class="bat-tick" x1="299.5" y1="116" x2="299.5" y2="124"/>
+            <line class="bat-tick" x1="307" y1="116" x2="307" y2="124"/>
+            <line class="bat-tick" x1="389.5" y1="116" x2="389.5" y2="124"/>
+            <line class="bat-tick" x1="397" y1="116" x2="397" y2="124"/>
+            <text x="337" y="148" text-anchor="middle">Bateria</text>
+            <text class="sub" x="337" y="168" text-anchor="middle" id="labBat">70%</text>
+          </g>
+          <g>
+            <rect class="comp" x="430" y="128" width="84" height="44" rx="5"/>
+            <text x="472" y="147" text-anchor="middle">Controle</text>
+            <text class="sub" x="472" y="164" text-anchor="middle">VHDL</text>
+          </g>
+          <text class="sub" x="40" y="264">traseira</text>
+          <text class="sub" x="618" y="264" text-anchor="end">frente</text>
+        </svg>
+        <p class="car-caption" id="carCaption">Azul: bateria empurrando as rodas (deploy). Laranja: frenagem virando eletricidade. Verde: turbo virando eletricidade.</p>
+      </section>
+
+      <section class="panel controls" aria-labelledby="ctlTitle">
+        <h2 id="ctlTitle">Pilotagem</h2>
+        <div class="pedals">
+          <button class="pedal throttle" id="btnThrottle" type="button" aria-pressed="false">
+            <span class="level" id="lvlThrottle"></span>
+            Acelerar <kbd>↑ ou W</kbd>
+          </button>
+          <button class="pedal brake" id="btnBrake" type="button" aria-pressed="false">
+            <span class="level" id="lvlBrake"></span>
+            Frear <kbd>↓ ou espaço</kbd>
+          </button>
+        </div>
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="Quem pilota">
+            <button type="button" id="modeAuto" aria-pressed="true">Volta de referência</button>
+            <button type="button" id="modeManual" aria-pressed="false">Você pilota</button>
+          </div>
+          <div class="seg" role="group" aria-label="Velocidade da simulação">
+            <button type="button" data-speed="1" aria-pressed="true">1×</button>
+            <button type="button" data-speed="2" aria-pressed="false">2×</button>
+            <button type="button" data-speed="4" aria-pressed="false">4×</button>
+          </div>
+          <button type="button" class="btn" id="btnPause">Pausar</button>
+          <button type="button" class="btn" id="btnRestart">Recomeçar</button>
+        </div>
+        <p class="hint" id="pilotHint">Na volta de referência o carro segue o mesmo perfil usado nos testes do VHDL. Aperte Acelerar ou Frear para assumir o volante.</p>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" aria-labelledby="stateTitle">
+        <h2 id="stateTitle">O que o controlador decidiu</h2>
+        <div class="mode-pill" id="modePill"><i></i><span id="modeName">Espera</span> <code id="modeCode">000</code></div>
+        <p class="explain" id="explain" aria-live="polite">Carregando…</p>
+        <p class="reason" id="reason"></p>
+        <div class="fsm" aria-hidden="true">
+          <svg viewBox="0 0 420 210">
+            <line class="edge" x1="210" y1="105" x2="210" y2="38"/>
+            <line class="edge" x1="210" y1="105" x2="70" y2="105"/>
+            <line class="edge" x1="210" y1="105" x2="350" y2="105"/>
+            <line class="edge" x1="210" y1="105" x2="210" y2="172"/>
+            <line class="edge" x1="210" y1="38" x2="70" y2="105"/>
+            <line class="edge" x1="210" y1="38" x2="350" y2="105"/>
+            <path class="edge" d="M70 120 Q210 160 350 120"/>
+            <g class="node" data-mode="3"><rect x="150" y="20" width="120" height="36" rx="18"/><text x="210" y="43">DEPLOY</text></g>
+            <g class="node" data-mode="1"><rect x="10" y="87" width="120" height="36" rx="18"/><text x="70" y="110">HARVEST K</text></g>
+            <g class="node" data-mode="0"><rect x="160" y="87" width="100" height="36" rx="18"/><text x="210" y="110">STANDBY</text></g>
+            <g class="node" data-mode="2"><rect x="290" y="87" width="120" height="36" rx="18"/><text x="350" y="110">HARVEST H</text></g>
+            <g class="node" data-mode="7"><rect x="160" y="154" width="100" height="36" rx="18"/><text x="210" y="177">FAULT</text></g>
+          </svg>
+        </div>
+      </section>
+
+      <section class="panel gauges" aria-labelledby="gaugeTitle">
+        <h2 id="gaugeTitle">Bateria e regulamento</h2>
+        <div>
+          <div class="gauge-head"><span>Carga da bateria (SoC) · faixa hachurada: falha</span><b id="socVal">70.0%</b></div>
+          <div class="bar" id="socBar">
+            <div class="zone" style="left:0;width:20%"></div>
+            <div class="zone" style="left:95%;width:5%"></div>
+            <div class="fill" id="socFill" style="width:70%"></div>
+            <div class="mark" style="left:25%"></div>
+            <div class="mark" style="left:30%"></div>
+            <div class="mark" style="left:85%"></div>
+            <div class="mark" style="left:90%"></div>
+          </div>
+          <div class="bar-scale"><span style="left:27.5%">25|30%</span><span style="left:87.5%">85|90%</span></div>
+        </div>
+        <div>
+          <div class="gauge-head"><span>Energia de deploy nesta volta</span><b id="eVal">0.00 / 4 MJ</b></div>
+          <div class="bar"><div class="fill" id="eFill" style="width:0%"></div></div>
+        </div>
+        <div class="readouts">
+          <div class="readout"><small><i style="background:var(--deploy)"></i>Deploy</small><b id="rDeploy">0<em>kW</em></b></div>
+          <div class="readout"><small><i style="background:var(--harv-k)"></i>Recup. MGU-K</small><b id="rK">0<em>kW</em></b></div>
+          <div class="readout"><small><i style="background:var(--harv-h)"></i>Recup. MGU-H</small><b id="rH">0<em>kW</em></b></div>
+          <div class="readout"><small>Velocidade</small><b id="rSpeed">0<em>km/h</em></b></div>
+          <div class="readout"><small>Turbo</small><b id="rTurbo">0<em>mil rpm</em></b></div>
+          <div class="readout"><small>Acelerador · freio</small><b id="rPedals">0 · 0<em>%</em></b></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="charts">
+    <section class="panel" aria-labelledby="pTitle">
+      <h2 id="pTitle">Potência nos últimos 30 s</h2>
+      <div class="legend">
+        <span><i style="background:var(--deploy)"></i>Deploy</span>
+        <span><i style="background:var(--harv-k)"></i>Recuperação MGU-K</span>
+        <span><i style="background:var(--harv-h)"></i>Recuperação MGU-H</span>
+      </div>
+      <div class="chart-box"><canvas id="chartP" aria-label="Gráfico de potência de deploy e recuperação nos últimos 30 segundos" role="img"></canvas><div class="tip" id="tipP" hidden></div></div>
+    </section>
+    <section class="panel" aria-labelledby="sTitle">
+      <h2 id="sTitle">Carga da bateria nos últimos 30 s</h2>
+      <div class="legend"><span><i style="background:var(--ink)"></i>SoC (%) · linhas: limites de 25/30% e 85/90%</span></div>
+      <div class="chart-box"><canvas id="chartS" aria-label="Gráfico da carga da bateria nos últimos 30 segundos" role="img"></canvas><div class="tip" id="tipS" hidden></div></div>
+    </section>
+  </div>
+
+  <div class="bottom">
+    <section class="panel" aria-labelledby="lapsTitle">
+      <h2 id="lapsTitle">Voltas</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Volta</th><th>Tempo</th><th>Deploy</th><th>Recuperado</th><th>SoC final</th></tr></thead>
+          <tbody id="lapRows"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel lab" aria-labelledby="labTitle">
+      <h2 id="labTitle">Laboratório</h2>
+      <label for="optHyst">
+        <input type="checkbox" id="optHyst" checked>
+        <span>Histerese da bateria
+          <small>Desligada, o controlador alterna entre gastar e recuperar várias vezes por segundo quando a bateria chega a 25%. Era assim antes da correção.</small></span>
+      </label>
+      <label for="optBump">
+        <input type="checkbox" id="optBump" checked>
+        <span>Partida suave do PI
+          <small>Desligada, o motor dá um tranco de potência ao voltar ao deploy, porque o controlador lembra o valor antigo.</small></span>
+      </label>
+      <div class="range">
+        <div><label for="optSoc0">Bateria no início</label><b id="soc0Val">70%</b></div>
+        <input type="range" id="optSoc0" min="30" max="90" step="5" value="70">
+      </div>
+      <p class="hint">Mudar uma opção recomeça a simulação.</p>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <p>O controlador desta página é uma emulação ciclo a ciclo do VHDL do projeto (máquina de estados, controle PI em ponto fixo, PWM e medidor de energia), rodando a 5 kHz como na co-simulação. A cada alteração do código, um teste automático compara esta emulação com o VHDL rodando no simulador GHDL. A física (bateria, MGU-K, MGU-H) é simplificada e usa os parâmetros do modelo do projeto: bateria de 4 MJ, MGU-K de 120 kW, MGU-H de 50 kW, limite de 4 MJ de deploy por volta.</p>
+    <p>Código e documentação: <a href="https://github.com/HieiMaster23/ers-controller" target="_blank" rel="noopener">github.com/HieiMaster23/ers-controller</a></p>
+  </footer>
+</div>
+
+<script src="ers_model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

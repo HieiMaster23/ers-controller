@@ -6,21 +6,24 @@
 --            de clock quando deploy esta ativo. Reseta com lap_reset.
 --
 -- Escala de energia:
---   duty_cycle (0-65535) e proporcional a potencia de deploy.
---   P_deploy = duty_cycle * P_MAX_SCALE (constante de escala)
---   Usamos unidade de kJ com 8 bits fracionarios (Q8) em 24 bits.
+--   duty_cycle (0-65535) e proporcional a potencia de deploy:
+--   P_deploy = (duty / 65535) * P_MAX_W
+--   Saida em kJ com 8 bits fracionarios (Q8) em 24 bits.
 --   Faixa: 0 a 65535.996 kJ (24 bits unsigned Q8)
 --   Saturacao em 4000 kJ = 4 MJ -> 4000 * 256 = 1024000
 --
--- Integracao:
---   dt = 1/50MHz = 20 ns = 20e-9 s
---   A cada ciclo: energy += P_instantanea * dt
---   P_instantanea = (duty / 65535) * 120000 W = duty * 1.831 W
---   energy_increment = P * dt = duty * 1.831 * 20e-9 = duty * 3.662e-5 J
---                    = duty * 3.662e-8 kJ
---   Em Q8: duty * 3.662e-8 * 256 = duty * 9.375e-6
---   Aproximado como: duty >> 17 (divide por 131072 ~ 1/106496)
---   Mais preciso: usamos um acumulador fracionario de 40 bits internamente
+-- Integracao (valores para os generics padrao, 120 kW @ 50 MHz):
+--   dt = 1 / CLK_HZ = 20 ns
+--   energy_per_clk = (duty / 65535) * 120000 W * 20e-9 s
+--                  = duty * 3.662e-8 J = duty * 3.662e-11 kJ
+--   Em Q8 (x256):   duty * 9.375e-9
+--   O acumulador interno guarda a energia com 40 bits fracionarios extras
+--   (escala 2^40), entao o incremento por ciclo e:
+--     INTEG_SCALE = round(9.375e-9 * 2^40) = 10308   (erro < 0.001%)
+--   Acumulador de 64 bits: bits [63:40] = energy_used (Q8 kJ).
+--
+--   Para testes com escala de tempo comprimida, CLK_HZ pode ser reduzido
+--   (minimo 1000): com CLK_HZ = 1000 cada ciclo vale 1 ms de energia.
 -- ============================================================================
 
 library ieee;
@@ -28,6 +31,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity energy_meter is
+    generic (
+        CLK_HZ  : positive := 50_000_000;  -- frequencia do clock (Hz), >= 1000
+        P_MAX_W : positive := 120_000      -- potencia de deploy com duty = 65535 (W)
+    );
     port (
         clk         : in  std_logic;
         rst_n       : in  std_logic;
@@ -44,42 +51,40 @@ architecture rtl of energy_meter is
     -- Constantes
     -- ========================================================================
     -- Energia maxima por volta: 4 MJ = 4000 kJ, em Q8 = 1024000
-    constant ENERGY_MAX : unsigned(39 downto 0) :=
-        to_unsigned(1024000, 40);
+    constant ENERGY_MAX : unsigned(23 downto 0) := to_unsigned(1024000, 24);
 
-    -- Fator de escala para integracao:
-    -- P = (duty / 65535) * 120000 W
-    -- energy_per_clk = P * 20e-9 s = duty * 120000/65535 * 20e-9 J
-    --                = duty * 3.662e-5 J = duty * 3.662e-8 kJ
-    -- Em Q8 (x256): duty * 9.375e-6
-    -- Em acumulador de 40 bits para precisao, usamos shift+add:
-    -- 9.375e-6 ~= 1/106667 ~= acumular em bits altos
-    -- Simplificacao: usamos multiplicacao por constante pequena e shift
-    -- SCALE = round(9.375e-6 * 2^24) = round(157.286) = 157
-    constant INTEG_SCALE : unsigned(7 downto 0) := to_unsigned(157, 8);
+    -- Mesmo limite na escala do acumulador (Q8 kJ * 2^40)
+    constant ACCUM_MAX  : unsigned(63 downto 0) :=
+        ENERGY_MAX & to_unsigned(0, 40);
+
+    -- Incremento por ciclo para duty = 1, na escala do acumulador:
+    -- (P_MAX_W / 65535) [W] / CLK_HZ [s^-1] / 1000 [J->kJ] * 256 [Q8] * 2^40
+    constant SCALE_REAL : real :=
+        real(P_MAX_W) / 65535.0 / real(CLK_HZ) / 1000.0 * 256.0 * 2.0**40;
+    constant INTEG_SCALE : unsigned(31 downto 0) :=
+        to_unsigned(integer(SCALE_REAL), 32);
 
     -- ========================================================================
     -- Sinais internos
     -- ========================================================================
-    -- Acumulador fracionario de 40 bits para manter precisao
-    -- Bits [39:24] = parte inteira em Q8 (os 24 bits de saida)
-    -- Bits [23:0]  = parte fracionaria (acumulacao)
-    signal energy_accum : unsigned(39 downto 0);
+    -- Acumulador de 64 bits
+    -- Bits [63:40] = energia em kJ Q8 (os 24 bits de saida)
+    -- Bits [39:0]  = fracao extra para nao perder incrementos pequenos
+    signal energy_accum : unsigned(63 downto 0);
 
-    -- Produto intermediario: duty(16) * SCALE(8) = 24 bits
-    signal increment    : unsigned(23 downto 0);
+    -- Produto intermediario: duty(16) * SCALE(32) = 48 bits
+    signal increment    : unsigned(47 downto 0);
 
 begin
 
     -- Calculo do incremento (combinacional)
-    -- duty_cycle * INTEG_SCALE, resultado em 24 bits
     increment <= unsigned(duty_cycle) * INTEG_SCALE;
 
     -- ========================================================================
     -- Processo de integracao
     -- ========================================================================
     process(clk, rst_n)
-        variable accum_new : unsigned(39 downto 0);
+        variable accum_new : unsigned(63 downto 0);
     begin
         if rst_n = '0' then
             energy_accum <= (others => '0');
@@ -91,13 +96,11 @@ begin
 
             elsif deploy_en = '1' then
                 -- Integrar: acumular incremento
-                accum_new := energy_accum + resize(increment, 40);
+                accum_new := energy_accum + resize(increment, 64);
 
-                -- Saturacao no maximo de energia
-                if accum_new(39 downto 24) > ENERGY_MAX(39 downto 24) then
-                    -- Travar no valor maximo (24 bits superiores = ENERGY_MAX)
-                    energy_accum(39 downto 24) <= ENERGY_MAX(39 downto 24);
-                    energy_accum(23 downto 0)  <= (others => '0');
+                -- Saturacao no maximo de energia (trava, nunca da a volta)
+                if accum_new >= ACCUM_MAX then
+                    energy_accum <= ACCUM_MAX;
                 else
                     energy_accum <= accum_new;
                 end if;
@@ -107,8 +110,8 @@ begin
     end process;
 
     -- ========================================================================
-    -- Saida: 24 bits superiores do acumulador (parte inteira em Q8)
+    -- Saida: 24 bits superiores do acumulador (kJ em Q8)
     -- ========================================================================
-    energy_used <= std_logic_vector(energy_accum(39 downto 16));
+    energy_used <= std_logic_vector(energy_accum(63 downto 40));
 
 end architecture rtl;

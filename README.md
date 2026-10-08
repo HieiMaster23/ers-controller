@@ -1,6 +1,8 @@
 # ERS Simulation Project
 
-Simulador de Sistema de Recuperação de Energia (ERS) inspirado em regulamentos de Formula 1, implementado em VHDL com co-simulação Simulink/ModelSim.
+Simulador de Sistema de Recuperação de Energia (ERS) inspirado em regulamentos de Formula 1, implementado em VHDL com co-simulação Simulink/ModelSim e co-simulação livre GHDL + Python (cocotb).
+
+> **Para conhecer o conceito:** abra [`web/index.html`](web/README.md) no navegador e pilote. O painel mostra em tempo real o que o controlador decide e por quê.
 
 ## Objetivo
 
@@ -35,6 +37,8 @@ Projeto acadêmico que demonstra o funcionamento de um controlador eletrônico e
 
 | Ferramenta           | Funcao                                          |
 |----------------------|-------------------------------------------------|
+| GHDL                 | Simulação livre do VHDL (testes automatizados/CI) |
+| Python + cocotb      | Planta física e co-simulação livre com o VHDL     |
 | ModelSim / Questa    | Simulação e verificação do VHDL                  |
 | MATLAB / Simulink    | Modelo físico do veículo e co-simulacao          |
 | Simscape Electrical  | Modelagem dos componentes elétricos              |
@@ -64,8 +68,21 @@ ers_project/
 |   +-- tb_ers_fsm.vhd
 |   +-- tb_pi_controller.vhd
 |   +-- tb_power_arbiter.vhd
+|   +-- tb_energy_meter.vhd
 |   +-- tb_ers_top.vhd
++-- web/                  (painel interativo "ERS ao vivo")
+|   +-- index.html
+|   +-- app.js
+|   +-- ers_model.js
+|   +-- test/compare_with_vhdl.js
++-- cosim/                (co-simulação GHDL + Python)
+|   +-- plant.py
+|   +-- test_ers_cosim.py
+|   +-- run_cosim.py
+|   +-- plot_results.py
+|   +-- hdl/ers_cosim_wrapper.vhd
 +-- scripts/
+    +-- run_tests.sh      (GHDL)
     +-- compile_all.do
     +-- sim_standalone.do
     +-- sim_cosim.do
@@ -78,6 +95,8 @@ ers_project/
 - [Arquitetura VHDL](docs/03_arquitetura_vhdl.md)
 - [Co-simulação](docs/04_cosimulacao.md)
 - [Resultados e Análise](docs/05_resultados.md)
+- [Co-simulação com Planta Python](docs/06_cosimulacao_python.md)
+- [Painel interativo "ERS ao vivo"](web/README.md)
 
 ## Convenções de Código VHDL
 
@@ -95,7 +114,10 @@ ers_project/
 - [x] Etapa 4 -- Co-simulação (Simulink + placeholder / HDL Verifier)
 - [x] Etapa 5 -- Análise de resultados e documentação final
 
-**Projeto concluido.** Veja [docs/05_resultados.md](docs/05_resultados.md) para a análise final.
+- [x] Etapa 6 -- Co-simulação livre: VHDL real (GHDL) + planta Python (cocotb), no CI
+- [x] Etapa 7 -- Painel web interativo "ERS ao vivo" (controlador emulado ciclo a ciclo, verificado contra o VHDL no CI)
+
+Veja [docs/05_resultados.md](docs/05_resultados.md) e [docs/06_cosimulacao_python.md](docs/06_cosimulacao_python.md).
 
 ## Resultados Principais
 
@@ -107,7 +129,21 @@ ers_project/
 | Potência deploy pico | <= 120 kW | 120.0 kW | Aprovado |
 | SoC min / max | [20%, 95%] | [25%, 70%] | Aprovado |
 
-**Testbenches VHDL:** 4/4 passando (ers_fsm, pi_controller, power_arbiter, ers_top) -- 33 testes individuais cobrindo transicoes, prioridades, saturacao, anti-windup, corte de energia e PWM.
+> Os valores acima vêm da co-simulação em modo **placeholder** (controlador emulado em Simulink), não do VHDL. Veja [docs/05_resultados.md](docs/05_resultados.md), seção 5.6.
+
+### Com o controlador VHDL real (co-simulação Python)
+
+| Volta | Deploy entregue | Harvest | SoC no fim |
+|-------|-----------------|---------|------------|
+| 1 | 2.80 MJ | 1.01 MJ | 25.4% |
+| 2 | 1.27 MJ | 1.31 MJ | 26.3% |
+| 3 | 1.31 MJ | 1.30 MJ | 26.0% |
+
+O regulamento é respeitado (sem FAULT, deploy ≤ 4 MJ/volta, ≤ 120 kW, SoC em [20%, 95%]), mas a partir da volta 2 o carro só gasta o que recupera. A co-simulação revelou dois problemas do controlador, já corrigidos: oscilação da FSM no limite de SoC (agora com histerese 25%/30%) e salto de potência ao reentrar em deploy (agora o PI parte do setpoint). Detalhes em [docs/06_cosimulacao_python.md](docs/06_cosimulacao_python.md).
+
+![Co-simulação de 3 voltas](docs/img/cosim_race.png)
+
+**Testbenches VHDL:** 5/5 passando no GHDL (ers_fsm, pi_controller, power_arbiter, energy_meter, ers_top), rodando automaticamente no GitHub Actions a cada push. Os testbenches são auto-verificáveis: conferem valores numéricos de energia, saturação/anti-windup do PI, oscilação do PWM e o corte de deploy em 4 MJ/volta.
 
 ## Como Reproduzir
 
@@ -120,6 +156,16 @@ validate_standalone
 create_cosim_top
 out = sim('cosim_top');
 analyze_cosim_results
+```
+
+```bash
+# Testbenches VHDL (GHDL, livre)
+./scripts/run_tests.sh
+
+# Co-simulação VHDL + planta Python (GHDL + cocotb)
+pip install -r cosim/requirements.txt
+python cosim/run_cosim.py
+python cosim/plot_results.py
 ```
 
 ```tcl

@@ -13,17 +13,29 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity ers_top is
+    generic (
+        -- Frequencia do clock usada na integracao de energia. Testbenches
+        -- podem reduzir para comprimir o tempo (ver energy_meter.vhd).
+        CLK_HZ      : positive := 50_000_000;
+        -- Ganhos do PI em Q16 (1.0 = 65536), aplicados a cada ciclo de clock
+        KP          : integer  := 1024;
+        KI          : integer  := 64;
+        -- Contador PWM conta de 0 a PWM_PERIOD (999 -> 50 kHz a 50 MHz)
+        PWM_PERIOD  : positive := 999
+    );
     port (
         -- Clock e reset
         clk         : in  std_logic;                     -- 50 MHz (periodo = 20 ns)
         rst_n       : in  std_logic;                     -- reset ativo em nivel baixo
         -- Entradas da planta (Simulink)
-        speed_rpm   : in  std_logic_vector(15 downto 0); -- 0 a 20000 RPM, unsigned
+        speed_rpm   : in  std_logic_vector(15 downto 0); -- 0 a 20000 RPM (reservado, nao usado)
         brake_pres  : in  std_logic_vector(11 downto 0); -- 0 a 4095 (ADC 12 bits)
         throttle    : in  std_logic_vector(11 downto 0); -- 0 a 4095 (ADC 12 bits)
         soc_in      : in  std_logic_vector(11 downto 0); -- 0 a 4095 = 0% a 100%
         turbo_rpm   : in  std_logic_vector(15 downto 0); -- 0 a 65535 RPM
         lap_reset   : in  std_logic;                     -- pulso de reset de volta
+        p_mguk_meas : in  std_logic_vector(15 downto 0); -- potencia de deploy medida
+                                                         -- 0 a 65535 = 0 a 120 kW
         -- Saidas para a planta (Simulink)
         pwm_mguk    : out std_logic;                     -- PWM para MGU-K (50 kHz)
         pwm_mguh    : out std_logic;                     -- PWM para MGU-H (50 kHz)
@@ -72,6 +84,8 @@ begin
     -- Setpoint proporcional ao throttle durante deploy
     -- throttle (12 bits, 0-4095) -> setpoint (16 bits, 0-65535)
     -- setpoint = throttle * 16
+    -- O PI compara com p_mguk_meas (mesma escala: 65535 = 120 kW), entao
+    -- a potencia entregue pelo MGU-K segue a fracao pedida pelo piloto.
     pi_setpoint_i <= throttle & "0000" when deploy_en_i = '1' else
                      (others => '0');
 
@@ -99,8 +113,8 @@ begin
     -- ========================================================================
     u_pi : entity work.pi_controller
         generic map (
-            KP      => 1024,   -- 0.015625 em Q16
-            KI      => 64,     -- 0.000977 em Q16
+            KP      => KP,     -- padrao 1024 = 0.015625 em Q16
+            KI      => KI,     -- padrao 64   = 0.000977 em Q16
             OUT_MAX => 65535,
             OUT_MIN => 0
         )
@@ -109,7 +123,7 @@ begin
             rst_n    => rst_n,
             enable   => pi_enable_i,
             setpoint => pi_setpoint_i,
-            measured => speed_rpm,  -- feedback: velocidade como proxy de potencia
+            measured => p_mguk_meas,  -- feedback: potencia medida do MGU-K
             duty_out => duty_from_pi
         );
 
@@ -117,6 +131,9 @@ begin
     -- Instancia: Arbitro de Potencia
     -- ========================================================================
     u_arbiter : entity work.power_arbiter
+        generic map (
+            PWM_PERIOD => PWM_PERIOD
+        )
         port map (
             clk          => clk,
             rst_n        => rst_n,
@@ -134,6 +151,10 @@ begin
     -- Instancia: Integrador de Energia
     -- ========================================================================
     u_energy : entity work.energy_meter
+        generic map (
+            CLK_HZ  => CLK_HZ,
+            P_MAX_W => 120_000
+        )
         port map (
             clk         => clk,
             rst_n       => rst_n,

@@ -68,7 +68,24 @@ echo "--- tb_power_arbiter concluido ---"
 quit -sim
 
 # ------------------------------------------------------------------
-# Testbench 4: Integracao (ers_top)
+# Testbench 4: Energy Meter isolado
+# ------------------------------------------------------------------
+echo ""
+echo "--- Testbench: tb_energy_meter ---"
+vsim -t ns work.tb_energy_meter
+add wave -radix binary /tb_energy_meter/clk
+add wave -radix binary /tb_energy_meter/rst_n
+add wave -radix binary /tb_energy_meter/deploy_en
+add wave -radix unsigned /tb_energy_meter/duty_cycle
+add wave -radix binary /tb_energy_meter/lap_reset
+add wave -radix unsigned /tb_energy_meter/energy_real
+add wave -radix unsigned /tb_energy_meter/energy_fast
+run -all
+echo "--- tb_energy_meter concluido ---"
+quit -sim
+
+# ------------------------------------------------------------------
+# Testbench 5: Integracao (ers_top)
 # ------------------------------------------------------------------
 echo ""
 echo "--- Testbench: tb_ers_top (integracao) ---"
