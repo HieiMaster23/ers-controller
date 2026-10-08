@@ -1,0 +1,26 @@
+name: VHDL tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ghdl:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar GHDL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghdl
+
+      - name: Rodar testbenches
+        run: ./scripts/run_tests.sh
+
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghdl-logs
+          path: build/ghdl/*.log

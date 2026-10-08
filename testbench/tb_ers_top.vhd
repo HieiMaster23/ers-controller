@@ -5,6 +5,11 @@
 -- Descricao: Testbench de integracao do ers_top. Simula um cenario de corrida
 --            simplificado (1 volta) e verifica as transicoes de estado,
 --            geracao de PWM, e acumulacao de energia.
+--
+-- Escala de tempo: o DUT e instanciado com CLK_HZ = 1000, entao para o
+-- energy_meter cada ciclo de clock vale 1 ms. Isso permite atingir o
+-- limite de 4 MJ/volta (~33k ciclos a 120 kW) em tempo de simulacao curto.
+-- A logica (FSM, PI, PWM) e a mesma; so a escala de energia muda.
 -- ============================================================================
 
 library ieee;
@@ -29,6 +34,7 @@ architecture sim of tb_ers_top is
     signal ers_mode    : std_logic_vector(2 downto 0);
     signal energy_used : std_logic_vector(23 downto 0);
     signal fault_flag  : std_logic;
+    signal sim_done    : boolean := false;
 
     constant CLK_PERIOD : time := 20 ns; -- 50 MHz
 
@@ -37,16 +43,46 @@ architecture sim of tb_ers_top is
     -- 10000 ciclos = 0.2 ms (suficiente para observar transicoes)
     constant PHASE_LEN : integer := 10000;
 
+    -- Energia maxima por volta: 4 MJ = 4000 kJ, em Q8 = 1024000
+    constant ENERGY_MAX : integer := 1024000;
+
     procedure wait_clk(n : integer) is
     begin
         for i in 1 to n loop
             wait until rising_edge(clk);
         end loop;
+        wait for 1 ns;  -- amostrar apos a borda (saidas registradas estaveis)
     end procedure;
+
+    -- Conta transicoes de um sinal PWM durante n ciclos de clock
+    procedure count_toggles(signal pwm : in std_logic; n : integer;
+                            variable toggles : out integer) is
+        variable last : std_logic;
+        variable cnt  : integer := 0;
+    begin
+        last := pwm;
+        for i in 1 to n loop
+            wait until rising_edge(clk);
+            wait for 1 ns;
+            if pwm /= last then
+                cnt := cnt + 1;
+            end if;
+            last := pwm;
+        end loop;
+        toggles := cnt;
+    end procedure;
+
+    function energy_of(e : std_logic_vector) return integer is
+    begin
+        return to_integer(unsigned(e));
+    end function;
 
 begin
 
     dut : entity work.ers_top
+        generic map (
+            CLK_HZ => 1000  -- escala de tempo comprimida (ver cabecalho)
+        )
         port map (
             clk         => clk,
             rst_n       => rst_n,
@@ -63,9 +99,11 @@ begin
             fault_flag  => fault_flag
         );
 
-    clk <= not clk after CLK_PERIOD / 2;
+    clk <= not clk after CLK_PERIOD / 2 when not sim_done else '0';
 
     stim_proc : process
+        variable toggles  : integer;
+        variable e_before : integer;
     begin
         -- ================================================================
         -- RESET
@@ -102,10 +140,18 @@ begin
             report "FALHA F2: Deveria estar em DEPLOYING" severity error;
 
         -- Aguardar para observar PWM e acumulacao de energia
-        wait_clk(PHASE_LEN);
-        report "F2: energy_used = " &
-               integer'image(to_integer(unsigned(energy_used)))
+        wait_clk(PHASE_LEN - 2000);
+        count_toggles(pwm_mguk, 2000, toggles);
+        assert toggles >= 2
+            report "FALHA F2: pwm_mguk deveria oscilar durante deploy (transicoes = " &
+                   integer'image(toggles) & ")" severity error;
+        report "F2: energy_used = " & integer'image(energy_of(energy_used))
                severity note;
+        -- ~10 s de deploy com duty subindo ate 100%: entre 0 e 4 MJ
+        assert energy_of(energy_used) > ENERGY_MAX / 4 and
+               energy_of(energy_used) < ENERGY_MAX
+            report "FALHA F2: energia deveria acumular durante deploy, obtido " &
+                   integer'image(energy_of(energy_used)) severity error;
 
         -- ================================================================
         -- FASE 3: FRENAGEM -> HARVESTING_K
@@ -119,10 +165,16 @@ begin
         wait_clk(5);
         assert ers_mode = "001"
             report "FALHA F3: Deveria estar em HARVESTING_K" severity error;
-        assert pwm_mguk = '0' or pwm_mguk = '1' -- PWM deve estar oscilando
-            report "FALHA F3: pwm_mguk deveria estar ativo" severity note;
+        e_before := energy_of(energy_used);
+        count_toggles(pwm_mguk, 2000, toggles);
+        assert toggles >= 2
+            report "FALHA F3: pwm_mguk deveria oscilar em HARVESTING_K (transicoes = " &
+                   integer'image(toggles) & ")" severity error;
 
         wait_clk(PHASE_LEN);
+        assert energy_of(energy_used) = e_before
+            report "FALHA F3: harvest nao deve contar como energia de deploy"
+            severity error;
 
         -- ================================================================
         -- FASE 4: TURBO ALTO -> HARVESTING_H
@@ -170,8 +222,10 @@ begin
         wait_clk(PHASE_LEN);
 
         report "F7: Energia antes do reset = " &
-               integer'image(to_integer(unsigned(energy_used)))
-               severity note;
+               integer'image(energy_of(energy_used)) severity note;
+        assert energy_of(energy_used) > 0
+            report "FALHA F7: deveria haver energia acumulada antes do reset"
+            severity error;
 
         -- Pulso de lap_reset
         lap_reset <= '1';
@@ -180,8 +234,40 @@ begin
         wait_clk(5);
 
         report "F7: Energia apos reset = " &
-               integer'image(to_integer(unsigned(energy_used)))
-               severity note;
+               integer'image(energy_of(energy_used)) severity note;
+        -- Deploy continua ativo: apos 5 ciclos (5 ms) no maximo ~0.6 kJ (154 Q8)
+        assert energy_of(energy_used) <= 154
+            report "FALHA F7: energia deveria ter zerado com lap_reset, obtido " &
+                   integer'image(energy_of(energy_used)) severity error;
+
+        -- ================================================================
+        -- FASE 8: LIMITE DE 4 MJ/VOLTA
+        -- Deploy continuo: a 120 kW o limite chega em ~33 s (33k ciclos).
+        -- Energia deve travar em 4 MJ e a FSM deve sair de DEPLOYING.
+        -- ================================================================
+        report "--- FASE 8: Corte de deploy em 4 MJ ---" severity note;
+        wait_clk(40000);
+        assert energy_of(energy_used) = ENERGY_MAX
+            report "FALHA F8: energia deveria travar em 4 MJ, obtido " &
+                   integer'image(energy_of(energy_used)) severity error;
+        assert ers_mode = "000"
+            report "FALHA F8: com 4 MJ usados, FSM deveria sair de DEPLOYING"
+            severity error;
+        count_toggles(pwm_mguk, 2000, toggles);
+        assert toggles = 0 and pwm_mguk = '0'
+            report "FALHA F8: pwm_mguk deveria estar desligado apos o limite"
+            severity error;
+
+        -- ================================================================
+        -- FASE 9: Nova volta libera deploy novamente
+        -- ================================================================
+        report "--- FASE 9: Nova volta ---" severity note;
+        lap_reset <= '1';
+        wait_clk(1);
+        lap_reset <= '0';
+        wait_clk(5);
+        assert ers_mode = "011"
+            report "FALHA F9: apos lap_reset, deploy deveria voltar" severity error;
 
         -- ================================================================
         -- FIM
@@ -192,6 +278,7 @@ begin
         wait_clk(PHASE_LEN);
 
         report "=== TODOS OS TESTES DE INTEGRACAO CONCLUIDOS ===" severity note;
+        sim_done <= true;
         wait;
     end process;
 

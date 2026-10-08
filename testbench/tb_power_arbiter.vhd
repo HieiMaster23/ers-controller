@@ -26,6 +26,8 @@ architecture sim of tb_power_arbiter is
     signal pwm_mguh     : std_logic;
     signal duty_limited : std_logic_vector(15 downto 0);
 
+    signal sim_done     : boolean := false;
+
     constant CLK_PERIOD : time := 20 ns;
 
     procedure wait_clk(n : integer) is
@@ -51,7 +53,7 @@ begin
             duty_limited => duty_limited
         );
 
-    clk <= not clk after CLK_PERIOD / 2;
+    clk <= not clk after CLK_PERIOD / 2 when not sim_done else '0';
 
     stim_proc : process
     begin
@@ -135,6 +137,7 @@ begin
         -- ----------------------------------------------------------------
         wait_clk(5);
         report "=== TODOS OS TESTES DO POWER ARBITER CONCLUIDOS ===" severity note;
+        sim_done <= true;
         wait;
     end process;
 

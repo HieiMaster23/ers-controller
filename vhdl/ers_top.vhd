@@ -13,6 +13,11 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity ers_top is
+    generic (
+        -- Frequencia do clock usada na integracao de energia. Testbenches
+        -- podem reduzir para comprimir o tempo (ver energy_meter.vhd).
+        CLK_HZ      : positive := 50_000_000
+    );
     port (
         -- Clock e reset
         clk         : in  std_logic;                     -- 50 MHz (periodo = 20 ns)
@@ -134,6 +139,10 @@ begin
     -- Instancia: Integrador de Energia
     -- ========================================================================
     u_energy : entity work.energy_meter
+        generic map (
+            CLK_HZ  => CLK_HZ,
+            P_MAX_W => 120_000
+        )
         port map (
             clk         => clk,
             rst_n       => rst_n,

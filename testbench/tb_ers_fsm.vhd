@@ -29,6 +29,8 @@ architecture sim of tb_ers_fsm is
     signal fault_active : std_logic;
     signal ers_mode     : std_logic_vector(2 downto 0);
 
+    signal sim_done     : boolean := false;
+
     constant CLK_PERIOD : time := 20 ns; -- 50 MHz
 
     -- Procedimento para esperar N ciclos de clock
@@ -63,7 +65,7 @@ begin
     -- ========================================================================
     -- Geracao de clock
     -- ========================================================================
-    clk <= not clk after CLK_PERIOD / 2;
+    clk <= not clk after CLK_PERIOD / 2 when not sim_done else '0';
 
     -- ========================================================================
     -- Processo de estimulo
@@ -245,6 +247,7 @@ begin
         wait_clk(5);
 
         report "=== TODOS OS TESTES DA FSM CONCLUIDOS ===" severity note;
+        sim_done <= true;
         wait;
     end process;
 

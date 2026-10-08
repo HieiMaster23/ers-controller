@@ -35,6 +35,7 @@ Projeto acadêmico que demonstra o funcionamento de um controlador eletrônico e
 
 | Ferramenta           | Funcao                                          |
 |----------------------|-------------------------------------------------|
+| GHDL                 | Simulação livre do VHDL (testes automatizados/CI) |
 | ModelSim / Questa    | Simulação e verificação do VHDL                  |
 | MATLAB / Simulink    | Modelo físico do veículo e co-simulacao          |
 | Simscape Electrical  | Modelagem dos componentes elétricos              |
@@ -64,8 +65,10 @@ ers_project/
 |   +-- tb_ers_fsm.vhd
 |   +-- tb_pi_controller.vhd
 |   +-- tb_power_arbiter.vhd
+|   +-- tb_energy_meter.vhd
 |   +-- tb_ers_top.vhd
 +-- scripts/
+    +-- run_tests.sh      (GHDL)
     +-- compile_all.do
     +-- sim_standalone.do
     +-- sim_cosim.do
@@ -107,7 +110,9 @@ ers_project/
 | Potência deploy pico | <= 120 kW | 120.0 kW | Aprovado |
 | SoC min / max | [20%, 95%] | [25%, 70%] | Aprovado |
 
-**Testbenches VHDL:** 4/4 passando (ers_fsm, pi_controller, power_arbiter, ers_top) -- 33 testes individuais cobrindo transicoes, prioridades, saturacao, anti-windup, corte de energia e PWM.
+> Os valores acima vêm da co-simulação em modo **placeholder** (controlador emulado em Simulink), não do VHDL. Veja [docs/05_resultados.md](docs/05_resultados.md), seção 5.6.
+
+**Testbenches VHDL:** 5/5 passando no GHDL (ers_fsm, pi_controller, power_arbiter, energy_meter, ers_top), rodando automaticamente no GitHub Actions a cada push. Os testbenches são auto-verificáveis: conferem valores numéricos de energia, saturação/anti-windup do PI, oscilação do PWM e o corte de deploy em 4 MJ/volta.
 
 ## Como Reproduzir
 
@@ -120,6 +125,11 @@ validate_standalone
 create_cosim_top
 out = sim('cosim_top');
 analyze_cosim_results
+```
+
+```bash
+# Testbenches VHDL (GHDL, livre)
+./scripts/run_tests.sh
 ```
 
 ```tcl

@@ -20,6 +20,7 @@ architecture sim of tb_pi_controller is
     signal enable   : std_logic := '0';
     signal setpoint : std_logic_vector(15 downto 0) := (others => '0');
     signal measured : std_logic_vector(15 downto 0) := (others => '0');
+    signal sim_done : boolean := false;
     signal duty_out : std_logic_vector(15 downto 0);
 
     constant CLK_PERIOD : time := 20 ns;
@@ -29,6 +30,7 @@ architecture sim of tb_pi_controller is
         for i in 1 to n loop
             wait until rising_edge(clk);
         end loop;
+        wait for 1 ns;  -- amostrar apos a borda (saidas registradas estaveis)
     end procedure;
 
 begin
@@ -53,7 +55,7 @@ begin
         );
 
     -- Clock
-    clk <= not clk after CLK_PERIOD / 2;
+    clk <= not clk after CLK_PERIOD / 2 when not sim_done else '0';
 
     -- ========================================================================
     -- Estimulos
@@ -131,6 +133,9 @@ begin
 
         -- ----------------------------------------------------------------
         -- TESTE 6: Saturacao superior (setpoint muito alto)
+        -- erro = 60000 -> P = 1024*60000/65536 = 937.5
+        -- I cresce 64*60000/65536 = 58.6 por ciclo -> a saida atinge 65535
+        -- quando I >= 64598, ou seja, apos ~1103 ciclos.
         -- ----------------------------------------------------------------
         rst_n <= '0';
         wait_clk(2);
@@ -140,24 +145,43 @@ begin
         enable   <= '1';
         setpoint <= std_logic_vector(to_unsigned(60000, 16));
         measured <= std_logic_vector(to_unsigned(0, 16));
-        wait_clk(50);  -- Esperar integrador acumular
+        wait_clk(1000);
+        duty_val := to_integer(unsigned(duty_out));
+        assert duty_val > 55000 and duty_val < 65535
+            report "FALHA T6a: Apos 1000 ciclos, saida deveria estar perto de saturar. Valor: " &
+                   integer'image(duty_val)
+            severity error;
+        wait_clk(200);
         duty_val := to_integer(unsigned(duty_out));
         assert duty_val = 65535
-            report "FALHA T6: Com erro muito grande, saida deveria saturar em 65535. Valor: " &
+            report "FALHA T6b: Com erro muito grande, saida deveria saturar em 65535. Valor: " &
                    integer'image(duty_val)
             severity error;
 
+        -- Manter saturado por muito tempo: sem anti-windup o integrador
+        -- chegaria a ~58.6 * 6200 = 363000, bem acima de OUT_MAX.
+        wait_clk(5000);
+
         -- ----------------------------------------------------------------
-        -- TESTE 7: Anti-windup - apos saturacao, desaturar rapidamente
+        -- TESTE 7: Anti-windup - apos saturacao, desaturar imediatamente
+        -- Com o integrador travado em OUT_MAX, inverter o erro faz o termo P
+        -- negativo tirar a saida da saturacao ja no primeiro ciclo. Sem
+        -- anti-windup seriam ~5000 ciclos ate a saida comecar a cair.
         -- ----------------------------------------------------------------
-        -- Inverter o erro: measured > setpoint
         setpoint <= std_logic_vector(to_unsigned(0, 16));
         measured <= std_logic_vector(to_unsigned(60000, 16));
-        wait_clk(20);
+        wait_clk(2);
         duty_val := to_integer(unsigned(duty_out));
-        -- Saida deve ter caido significativamente (anti-windup funciona)
-        assert duty_val < 32768
-            report "FALHA T7: Anti-windup falhou, saida nao caiu rapido: " &
+        assert duty_val < 65535 - 900
+            report "FALHA T7a: Anti-windup falhou, saida nao saiu da saturacao: " &
+                   integer'image(duty_val)
+            severity error;
+
+        -- Descarregar o integrador: 65535 / 58.6 ~ 1119 ciclos ate zerar
+        wait_clk(1200);
+        duty_val := to_integer(unsigned(duty_out));
+        assert duty_val = 0
+            report "FALHA T7b: Saida deveria chegar a 0 apos descarregar o integrador: " &
                    integer'image(duty_val)
             severity error;
 
@@ -167,6 +191,7 @@ begin
         enable <= '0';
         wait_clk(5);
         report "=== TODOS OS TESTES DO PI CONCLUIDOS ===" severity note;
+        sim_done <= true;
         wait;
     end process;
 

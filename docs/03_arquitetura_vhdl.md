@@ -87,12 +87,14 @@
 
 ### Aritmetica Q16
 
-O controlador PI opera inteiramente em aritmetica de ponto fixo Q16 (16 bits inteiros, 16 bits fracionarios, 32 bits total signed).
+O controlador PI opera em aritmetica de ponto fixo com 16 bits fracionarios. Os ganhos sao dados em Q16 (1.0 = 65536) e os termos P, I e a soma usam 48 bits signed (Q32.16).
+
+48 bits sao necessarios porque o integrador precisa alcancar `OUT_MAX` na escala Q16: `65535 * 2^16 ~ 2^32`, que nao cabe em 32 bits signed. A versao original usava 32 bits e limitava o integrador a `OUT_MAX * 256` em Q16, ou seja, a apenas 256 unidades de duty (0.4% da faixa) -- o termo integral praticamente nao atuava.
 
 ```
-Formato Q16.16 (signed 32 bits):
-  Bit 31      = sinal
-  Bits 30..16 = parte inteira (15 bits) -> faixa -32768 a +32767
+Formato Q32.16 (signed 48 bits):
+  Bit 47      = sinal
+  Bits 46..16 = parte inteira
   Bits 15..0  = parte fracionaria (16 bits) -> resolucao 1/65536 = 1.53e-5
 
 Exemplo: KP = 1024 em Q16 = 1024 / 65536 = 0.015625
@@ -104,20 +106,20 @@ Exemplo: KP = 1024 em Q16 = 1024 / 65536 = 0.015625
 ```
 A cada ciclo de clock (se enable = '1'):
   1. error = setpoint - measured         (signed 17 bits)
-  2. p_term = KP * error                 (signed 32 bits, Q16)
-  3. i_accum += KI * error               (signed 32 bits, Q16, com clamping)
-  4. pi_sum = p_term + i_accum           (signed 32 bits)
+  2. p_term = KP * error                 (signed 48 bits, Q16)
+  3. i_accum += KI * error               (signed 48 bits, Q16, com clamping)
+  4. pi_sum = p_term + i_accum           (signed 48 bits)
   5. output = pi_sum >> 16               (converter Q16 -> inteiro)
   6. duty_out = saturate(output, 0, 65535)
 ```
 
 ### Anti-windup:
 
-O acumulador integral e limitado por clamping:
-- `INTEG_MAX = OUT_MAX * 256 = 16776960`
-- `INTEG_MIN = 0`
+O acumulador integral e limitado por clamping a faixa da saida, na escala Q16:
+- `INTEG_MAX = OUT_MAX * 2^16` (contribuicao integral maxima = 65535)
+- `INTEG_MIN = OUT_MIN * 2^16 = 0`
 
-Se `i_accum + KI*error` exceder esses limites, o acumulador trava no limite. Isso evita que o integrador "carregue" excessivamente durante saturacao, permitindo resposta rapida quando o erro muda de sinal.
+Se `i_accum + KI*error` exceder esses limites, o acumulador trava no limite. Isso evita que o integrador "carregue" excessivamente durante saturacao: quando o erro inverte de sinal, o termo P negativo tira a saida da saturacao ja no ciclo seguinte (verificado em `tb_pi_controller` T7).
 
 ### Resposta esperada:
 
@@ -126,29 +128,41 @@ Com KP=0.015625 e KI=0.000977, para um degrau de erro=5000:
 - I apos 10 ciclos: 0.000977 * 5000 * 10 = 48.8
 - Total apos 10 ciclos: ~127 (saida deve ser > 50, criterio de aceitacao)
 
+Para erro=60000 (saturacao): P = 937.5 e I cresce 58.6 por ciclo, entao a saida chega a 65535 apos ~1100 ciclos (22 us a 50 MHz).
+
 ## 3.4 Energy Meter (`energy_meter.vhd`)
 
 ### Integracao de energia:
 
-O integrador acumula energia deployada a cada ciclo de clock:
+O integrador acumula energia deployada a cada ciclo de clock. Os parametros sao generics: `CLK_HZ` (padrao 50 MHz) e `P_MAX_W` (padrao 120 kW, potencia com duty = 65535).
 
 ```
-P_deploy = (duty_cycle / 65535) * 120000 W
-energy_per_clock = P_deploy * dt = P_deploy * 20 ns
+P_deploy = (duty_cycle / 65535) * P_MAX_W
+energy_per_clock = P_deploy / CLK_HZ
+                 = duty * 1.831 W * 20 ns = duty * 3.662e-8 J  (padrao)
 
-Em unidades de kJ com formato Q8 (8 bits fracionarios):
-  increment = duty_cycle * INTEG_SCALE
-  INTEG_SCALE = round(9.375e-6 * 2^24) = 157
+Em kJ com formato Q8 (8 bits fracionarios):
+  duty * 3.662e-11 kJ * 256 = duty * 9.375e-9
 
-Acumulador interno: 40 bits unsigned
-  Bits [39:16] -> saida energy_used (24 bits, kJ em Q8)
-  Bits [15:0]  -> fracao adicional para precisao
+Acumulador interno com 40 bits fracionarios extras (escala 2^40):
+  increment   = duty_cycle * INTEG_SCALE
+  INTEG_SCALE = round(9.375e-9 * 2^40) = 10308   (calculado a partir dos generics)
+
+Acumulador interno: 64 bits unsigned
+  Bits [63:40] -> saida energy_used (24 bits, kJ em Q8)
+  Bits [39:0]  -> fracao para nao perder incrementos pequenos
 ```
+
+Verificacao: 4 MJ a 120 kW levam 33.3 s, ou seja, 1.67e9 ciclos a 50 MHz.
 
 ### Saturacao e reset:
 
-- **Saturacao:** Quando `energy_used >= 1024000` (4 MJ em Q8 kJ), o acumulador trava.
-- **Lap reset:** Pulso de 1 ciclo em `lap_reset` zera o acumulador completamente.
+- **Saturacao:** Quando a energia atinge `1024000` (4 MJ em Q8 kJ), o acumulador trava exatamente nesse valor (nunca da a volta).
+- **Lap reset:** Pulso de 1 ciclo em `lap_reset` zera o acumulador completamente (tem prioridade sobre o deploy).
+
+### Escala de tempo comprimida (testes):
+
+Com `CLK_HZ = 1000`, cada ciclo de clock vale 1 ms para a integracao. Assim o limite de 4 MJ e atingido em ~33k ciclos, viabilizando testar o corte de energia em simulacao (`tb_energy_meter`, `tb_ers_top`). `ers_top` repassa seu generic `CLK_HZ` ao `energy_meter`. Valor minimo suportado: 1000.
 
 ## 3.5 Power Arbiter (`power_arbiter.vhd`)
 
@@ -233,8 +247,8 @@ A latencia total do pipeline (entrada -> saida PWM) e de 3 ciclos de clock (60 n
 | T3 | Degrau positivo | duty cresce (> 0 apos 1 ciclo, > 50 apos 10) |
 | T4 | Erro zero | duty estabiliza |
 | T5 | Erro negativo | duty = 0 (saturacao inferior) |
-| T6 | Erro muito grande | duty = 65535 (saturacao superior) |
-| T7 | Anti-windup | Recuperacao rapida apos inversao |
+| T6 | Erro muito grande | perto de saturar apos 1000 ciclos; duty = 65535 apos 1200 |
+| T7 | Anti-windup | Apos 5000 ciclos saturado, sai da saturacao em 2 ciclos ao inverter o erro e zera apos ~1200 |
 
 ### tb_power_arbiter — 7 testes:
 
@@ -248,19 +262,49 @@ A latencia total do pipeline (entrada -> saida PWM) e de 3 ciclos de clock (60 n
 | T6 | Harvest H | PWM MGU-H ativo |
 | T7 | Tudo desligado | PWM = 0 |
 
-### tb_ers_top — 7 fases de integracao:
+### tb_energy_meter — 8 testes (valores numericos):
+
+Duas instancias com as mesmas entradas: `CLK_HZ = 50 MHz` (escala real) e `CLK_HZ = 1 kHz` (escala comprimida).
+
+| # | Teste | Resultado esperado |
+|---|-------|--------------------|
+| T1 | Reset | energia = 0 |
+| T2 | 30 s a 120 kW (1 kHz) | 3600 kJ = 921600 (Q8) |
+| T3 | Passar de 4 MJ (1 kHz) | trava em 1024000 |
+| T4 | 250k ciclos | 1 kHz continua em 1024000 (sem wrap); 50 MHz: 5 ms a 120 kW = 153 (Q8) |
+| T5 | deploy_en = 0 | energia retida |
+| T6 | Lap reset | energia = 0 nas duas instancias |
+| T7 | 10 s a 60 kW (1 kHz) | 600 kJ = 153602 (Q8) |
+| T8 | Lap reset com deploy ativo | reset tem prioridade |
+
+### tb_ers_top — 9 fases de integracao:
+
+Instanciado com `CLK_HZ = 1000` (escala comprimida) para que o limite de 4 MJ seja alcancavel.
 
 | Fase | Cenario | Verificacao |
 |------|---------|-------------|
 | F1 | Standby | ers_mode=000, fault=0 |
-| F2 | Aceleracao | DEPLOYING, energia acumula |
-| F3 | Frenagem | HARVESTING_K |
+| F2 | Aceleracao | DEPLOYING, PWM oscila, energia entre 1 e 4 MJ |
+| F3 | Frenagem | HARVESTING_K, PWM oscila, energia de deploy nao muda |
 | F4 | Turbo alto | HARVESTING_H |
 | F5 | SoC baixo | FAULT |
 | F6 | Recuperacao | STANDBY |
 | F7 | Lap reset | Energia zera |
+| F8 | Deploy continuo | Energia trava em 4 MJ, FSM sai de DEPLOYING, PWM desligado |
+| F9 | Nova volta | lap_reset libera DEPLOYING novamente |
 
 ## 3.9 Como Executar
+
+### Com GHDL (livre, recomendado)
+
+```bash
+./scripts/run_tests.sh                 # compila e roda todos os testbenches
+./scripts/run_tests.sh tb_energy_meter # apenas um
+```
+
+O script falha (codigo != 0) se qualquer `assert ... severity error` disparar ou se um testbench nao terminar sozinho. O mesmo script roda no GitHub Actions a cada push (`.github/workflows/vhdl-tests.yml`).
+
+### Com ModelSim
 
 ```
 # No ModelSim, a partir da pasta scripts/:
