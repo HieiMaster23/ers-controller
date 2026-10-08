@@ -2,6 +2,8 @@
 
 Simulador de Sistema de Recuperação de Energia (ERS) inspirado em regulamentos de Formula 1, implementado em VHDL com co-simulação Simulink/ModelSim e co-simulação livre GHDL + Python (cocotb).
 
+> **Para conhecer o conceito:** abra [`web/index.html`](web/README.md) no navegador e pilote. O painel mostra em tempo real o que o controlador decide e por quê.
+
 ## Objetivo
 
 Projeto acadêmico que demonstra o funcionamento de um controlador eletrônico embarcado de alta exigencia temporal, aplicado ao gerenciamento de energia em um carro de corrida. O sistema decide quando recuperar energia (frenagem e turbo) e quando injeta-la na tração, respeitando limites rígidos do regulamento.
@@ -68,6 +70,11 @@ ers_project/
 |   +-- tb_power_arbiter.vhd
 |   +-- tb_energy_meter.vhd
 |   +-- tb_ers_top.vhd
++-- web/                  (painel interativo "ERS ao vivo")
+|   +-- index.html
+|   +-- app.js
+|   +-- ers_model.js
+|   +-- test/compare_with_vhdl.js
 +-- cosim/                (co-simulação GHDL + Python)
 |   +-- plant.py
 |   +-- test_ers_cosim.py
@@ -89,6 +96,7 @@ ers_project/
 - [Co-simulação](docs/04_cosimulacao.md)
 - [Resultados e Análise](docs/05_resultados.md)
 - [Co-simulação com Planta Python](docs/06_cosimulacao_python.md)
+- [Painel interativo "ERS ao vivo"](web/README.md)
 
 ## Convenções de Código VHDL
 
@@ -107,6 +115,7 @@ ers_project/
 - [x] Etapa 5 -- Análise de resultados e documentação final
 
 - [x] Etapa 6 -- Co-simulação livre: VHDL real (GHDL) + planta Python (cocotb), no CI
+- [x] Etapa 7 -- Painel web interativo "ERS ao vivo" (controlador emulado ciclo a ciclo, verificado contra o VHDL no CI)
 
 Veja [docs/05_resultados.md](docs/05_resultados.md) e [docs/06_cosimulacao_python.md](docs/06_cosimulacao_python.md).
 

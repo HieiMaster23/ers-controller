@@ -43,6 +43,9 @@ jobs:
       - name: Co-simulacao VHDL + planta Python
         run: python cosim/run_cosim.py
 
+      - name: Painel web reproduz o VHDL
+        run: node web/test/compare_with_vhdl.js cosim/results/race_3_laps.csv
+
       - name: Graficos
         if: always()
         run: python cosim/plot_results.py
